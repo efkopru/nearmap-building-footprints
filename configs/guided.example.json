@@ -1,0 +1,8 @@
+{
+  "working_directory": "..",
+  "steps": [
+    ["infer", "--manifest", "data/prepared/run01/manifest.json", "--method", "exemplar", "--prompts", "data/prompts/exemplars.geojson", "--checkpoint", "models/sam3.pt", "--output", "outputs/exemplar_run01", "--execute"],
+    ["infer", "--manifest", "data/prepared/run01/manifest.json", "--method", "box", "--prompts", "data/prompts/boxes.geojson", "--checkpoint", "models/sam3.pt", "--output", "outputs/boxes_run01", "--execute"],
+    ["infer", "--manifest", "data/prepared/run01/manifest.json", "--method", "point", "--prompts", "data/prompts/points.geojson", "--checkpoint", "models/sam3.pt", "--output", "outputs/points_run01", "--execute"]
+  ]
+}

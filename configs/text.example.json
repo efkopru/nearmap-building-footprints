@@ -1,0 +1,9 @@
+{
+  "working_directory": "..",
+  "steps": [
+    ["inspect", "data/imagery/nearmap_rgb.tif"],
+    ["tile", "data/imagery/nearmap_rgb.tif", "--output", "data/prepared/run01", "--tile-size", "1024", "--overlap", "128"],
+    ["infer", "--manifest", "data/prepared/run01/manifest.json", "--method", "text", "--text", "building", "--checkpoint", "models/sam3.pt", "--output", "outputs/text_run01", "--execute"],
+    ["clean", "--input", "outputs/text_run01/raw", "--output", "outputs/text_run01/cleaned.gpkg", "--metric-crs", "EPSG:32614", "--min-area-m2", "4"]
+  ]
+}
