@@ -1,0 +1,42 @@
+name: CPU tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cpu:
+    name: Python 3.12 / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements-cpu.lock
+      - name: Install CPU dependencies
+        run: |
+          python -m pip install -r requirements-cpu.lock
+          python -m pip install --no-deps -e .
+      - name: Test CPU workflow and adapters
+        run: python -m pytest -q
+      - name: Exercise synthetic CLI pipeline
+        run: |
+          nbf doctor
+          nbf demo --output data/ci_demo
+          nbf inspect data/ci_demo/imagery.tif
+          nbf tile data/ci_demo/imagery.tif --output data/ci_tiles --tile-size 256 --overlap 64
+          nbf infer --manifest data/ci_tiles/manifest.json --method text --output outputs/ci_plan
+          nbf clean --input data/ci_demo/perfect_predictions.gpkg --output outputs/ci_cleaned.gpkg --metric-crs EPSG:32614
+          nbf evaluate --predictions outputs/ci_cleaned.gpkg --predictions-layer cleaned --reference data/ci_demo/reference.gpkg --aoi data/ci_demo/aoi.geojson --metric-crs EPSG:32614 --output-json outputs/ci_metrics.json --output-gpkg outputs/ci_matches.gpkg --independent-holdout
+          nbf train prepare-coco --manifest data/ci_tiles/manifest.json --ground-truth data/ci_demo/reference.gpkg --split-aois data/ci_demo/splits.geojson --output data/ci_training --labels-complete --skip-unassigned

@@ -1,0 +1,41 @@
+{
+  "description": "Original deterministic documentation figures; no model inference or real imagery.",
+  "seed": 20260920,
+  "python": "3.12.14",
+  "numpy": "2.3.5",
+  "pillow": "12.3.0",
+  "font_files": [
+    {
+      "name": "arial.ttf",
+      "sha256": "b3658eadae55e682b5f69eb64c439c1ecc8f196c0bb8d4756d145d13bc86476a"
+    },
+    {
+      "name": "arialbd.ttf",
+      "sha256": "e8f4e3baf6cc35fed6fcce3a540e8b39e8f6cda1d22a28f2ec8f526fef7a43f5"
+    }
+  ],
+  "generator_sha256": "2816f3b13230a719a844b75f40147cbf60dcd116f47f822f395b5ac0877096ad",
+  "outputs": [
+    {
+      "name": "workflow.png",
+      "sha256": "d86c85b813bda5228ed9bf17fe695447a609046313202230c7504b5832f8d25a",
+      "width": 1800,
+      "height": 1170
+    },
+    {
+      "name": "synthetic-example.png",
+      "sha256": "5cfa10a556293b31bae7fb3d86b21ba5bf6101cabf9913ef0bbb35eecf8b2cf4",
+      "width": 1800,
+      "height": 1280
+    }
+  ],
+  "synthetic_scene": {
+    "raster_pixels": [
+      512,
+      512
+    ],
+    "illustrative_gsd_m": 0.2,
+    "reference_instances": 12,
+    "model_executed": false
+  }
+}

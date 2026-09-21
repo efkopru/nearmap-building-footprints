@@ -1,0 +1,114 @@
+# @package _global_
+# Adapter for facebookresearch/sam3 2345a4ad109ac29c569da749c91d84f10dc08c40.
+# Copy into that checkout's sam3/train/configs/buildings.yaml.
+# Uses an existing local checkpoint; no model download is requested by this config.
+defaults:
+  - /configs/roboflow_v100/roboflow_v100_full_ft_100_images
+  - _self_
+
+paths:
+  dataset_root: ${oc.env:SAM3_DATASET_ROOT}
+  experiment_log_dir: ${oc.env:SAM3_LOG_DIR}
+  bpe_path: ${oc.env:SAM3_BPE_PATH}
+  checkpoint_path: ${oc.env:SAM3_CHECKPOINT}
+  roboflow_vl_100_root: ${paths.dataset_root}
+
+roboflow_train:
+  supercategory: buildings
+  num_images: null
+  # Instance-mask supervision. Semantic union supervision remains disabled.
+  loss:
+    loss_fns_find:
+      - _target_: sam3.train.loss.loss_fns.Boxes
+        weight_dict: {loss_bbox: 5.0, loss_giou: 2.0}
+      - _target_: sam3.train.loss.loss_fns.IABCEMdetr
+        weak_loss: false
+        weight_dict: {loss_ce: 20.0, presence_loss: 20.0}
+        pos_weight: 10.0
+        alpha: 0.25
+        gamma: 2
+        use_presence: true
+        pos_focal: false
+        pad_n_queries: 200
+        pad_scale_pos: 1.0
+      - _target_: sam3.train.loss.loss_fns.Masks
+        focal_alpha: 0.25
+        focal_gamma: 2.0
+        weight_dict: {loss_mask: 200.0, loss_dice: 10.0}
+        compute_aux: false
+    loss_fn_semantic_seg: null
+  val_transforms:
+    - _target_: sam3.train.transforms.basic_for_api.ComposeAPI
+      transforms:
+        - _target_: sam3.train.transforms.segmentation.DecodeRle
+        - _target_: sam3.train.transforms.basic_for_api.RandomResizeAPI
+          sizes: ${scratch.resolution}
+          max_size: ${scratch.resolution}
+          square: true
+          consistent_transform: false
+        - _target_: sam3.train.transforms.basic_for_api.ToTensorAPI
+        - _target_: sam3.train.transforms.basic_for_api.NormalizeAPI
+          mean: ${scratch.val_norm_mean}
+          std: ${scratch.val_norm_std}
+
+scratch:
+  enable_segmentation: true
+  train_batch_size: 1
+  val_batch_size: 1
+  num_train_workers: 0
+  num_val_workers: 0
+  collate_fn:
+    with_seg_masks: true
+  collate_fn_val:
+    with_seg_masks: true
+
+trainer:
+  skip_saving_ckpts: false
+  max_epochs: 20
+  val_epoch_freq: 1
+  model:
+    device: cpu
+    checkpoint_path: ${paths.checkpoint_path}
+    load_from_HF: false
+    enable_segmentation: true
+  data:
+    train:
+      dataset:
+        load_segmentation: true
+        coco_json_loader:
+          _target_: sam3.train.data.coco_json_loaders.COCO_FROM_JSON
+          _partial_: true
+          include_negatives: true
+          category_chunk_size: 1
+        img_folder: ${paths.dataset_root}/train/images
+        ann_file: ${paths.dataset_root}/train/annotations.json
+    val:
+      dataset:
+        load_segmentation: true
+        coco_json_loader:
+          _target_: sam3.train.data.coco_json_loaders.COCO_FROM_JSON
+          _partial_: true
+          include_negatives: true
+          category_chunk_size: 1
+        img_folder: ${paths.dataset_root}/val/images
+        ann_file: ${paths.dataset_root}/val/annotations.json
+  # Retain upstream box-monitoring metrics on validation only.
+  # Run footprint/mask evaluation separately on the untouched test split.
+  meters:
+    val:
+      roboflow100:
+        detection:
+          dump_dir: ${launcher.experiment_log_dir}/validation_boxes
+          pred_file_evaluators:
+            - _target_: sam3.eval.coco_eval_offline.CocoEvaluatorOfflineWithPredFileEvaluators
+              gt_path: ${paths.dataset_root}/val/annotations.json
+              tide: false
+              iou_type: bbox
+
+launcher:
+  num_nodes: 1
+  gpus_per_node: 1
+submitit:
+  use_cluster: false
+  job_array:
+    num_tasks: 0
