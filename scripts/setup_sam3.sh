@@ -12,8 +12,9 @@ if [[ -n "$training" && "$training" != "--training" ]]; then
 fi
 python3.12 -m venv .venv-sam3
 source .venv-sam3/bin/activate
-python -m pip install --upgrade pip
-python -m pip install torch==2.10.0 torchvision --index-url https://download.pytorch.org/whl/cu128
+python -m pip install pip==26.2.1
+# torchvision 0.25.0 is the release built against torch 2.10.0.
+python -m pip install torch==2.10.0 torchvision==0.25.0 --index-url https://download.pytorch.org/whl/cu128
 mkdir -p third_party
 if [[ ! -d third_party/sam3 ]]; then
   git clone https://github.com/facebookresearch/sam3.git third_party/sam3

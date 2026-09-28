@@ -22,10 +22,30 @@ import shapely
 from shapely.geometry import MultiPolygon, Polygon
 from shapely.strtree import STRtree
 
+from .common import FINGERPRINT_METHOD
 from .postprocess import metric_crs, polygon_parts, write_layers
 
 
-FINGERPRINT_METHOD = "sha256-normalized-wkb-source-crs-v1"
+ROW_ORDER_FINGERPRINT_METHOD = "sha256-normalized-wkb-source-crs-row-order-v1"
+
+
+def _normalized_wkb(geometry) -> bytes:
+    return shapely.to_wkb(shapely.normalize(geometry), hex=False, byte_order=1,
+                          output_dimension=3, include_srid=False)
+
+
+def _geometry_digest(frame: gpd.GeoDataFrame, method: str, geometries) -> str:
+    if frame.crs is None:
+        raise ValueError("fingerprinting requires an explicit source CRS")
+    authority = frame.crs.to_authority(min_confidence=100)
+    crs_key = ":".join(authority) if authority else frame.crs.to_wkt(version="WKT2_2019", pretty=False)
+    digest = hashlib.sha256()
+    digest.update(json.dumps({"method": method, "crs": crs_key,
+                              "feature_count": len(frame)}, sort_keys=True).encode("utf-8"))
+    for geometry in geometries:
+        digest.update(len(geometry).to_bytes(8, "big"))
+        digest.update(geometry)
+    return digest.hexdigest()
 
 
 def geometry_fingerprint(frame: gpd.GeoDataFrame) -> str:
@@ -36,20 +56,18 @@ def geometry_fingerprint(frame: gpd.GeoDataFrame) -> str:
     Polygon decomposition and any coordinate change intentionally change the hash.
     This proves matching input geometry, not annotation quality or independence.
     """
-    if frame.crs is None:
-        raise ValueError("fingerprinting requires an explicit source CRS")
-    authority = frame.crs.to_authority(min_confidence=100)
-    crs_key = ":".join(authority) if authority else frame.crs.to_wkt(version="WKT2_2019", pretty=False)
-    digest = hashlib.sha256()
-    digest.update(json.dumps({"method": FINGERPRINT_METHOD, "crs": crs_key,
-                              "feature_count": len(frame)}, sort_keys=True).encode("utf-8"))
-    geometries = sorted(shapely.to_wkb(shapely.normalize(geometry), hex=False,
-                                      byte_order=1, output_dimension=3, include_srid=False)
-                        for geometry in frame.geometry)
-    for geometry in geometries:
-        digest.update(len(geometry).to_bytes(8, "big"))
-        digest.update(geometry)
-    return digest.hexdigest()
+    return _geometry_digest(frame, FINGERPRINT_METHOD,
+                            sorted(_normalized_wkb(geometry) for geometry in frame.geometry))
+
+
+def row_order_fingerprint(frame: gpd.GeoDataFrame) -> str:
+    """Like geometry_fingerprint, but also fixes which row holds which geometry.
+
+    Reports refer to reference buildings by row position, so joining reports
+    building by building needs the reference rows in the same order each time.
+    """
+    return _geometry_digest(frame, ROW_ORDER_FINGERPRINT_METHOD,
+                            [_normalized_wkb(geometry) for geometry in frame.geometry])
 
 
 @dataclass
@@ -203,9 +221,12 @@ def evaluate(predictions: gpd.GeoDataFrame, reference: gpd.GeoDataFrame,
     report = {
         "schema_version": 1,
         "fingerprint_method": FINGERPRINT_METHOD,
+        # Identifies which prediction set produced this report; not a compatibility check.
+        "predictions_fingerprint": geometry_fingerprint(predictions),
         "reference_fingerprint": geometry_fingerprint(reference),
+        "reference_order_fingerprint": row_order_fingerprint(reference),
         "aoi_fingerprint": geometry_fingerprint(aoi),
-        "fingerprint_definition": "SHA-256 of source CRS and sorted normalized WKB geometries, including duplicate features. Independent of row order, ring start/direction, and multipart order; exact coordinates retained. Attributes excluded. This is input identity, not proof of annotation independence.",
+        "fingerprint_definition": "SHA-256 of source CRS and sorted normalized WKB geometries, including duplicate features. Independent of row order, ring start/direction, and multipart order; exact coordinates retained. Attributes excluded. This is input identity, not proof of annotation independence. reference_order_fingerprint hashes the same geometries in row order, so reference_id values keep pointing at the same buildings.",
         "reference_requirement": "Independent annotated holdout; AOI completely labeled. Independence is asserted by the operator, not inferred by this program. No pseudo-label validation.",
         "metric_crs": target.to_string(), "iou_threshold": iou_threshold,
         "edge_policy": edge_policy,
@@ -235,6 +256,8 @@ def evaluate(predictions: gpd.GeoDataFrame, reference: gpd.GeoDataFrame,
             "relative_area_error": "(prediction area minus reference area) / reference area, dimensionless",
             "boundary_hausdorff_m": "Symmetric discrete Hausdorff distance between polygon boundaries in metres, with Shapely densify=0.25; includes interior rings. Not average boundary error.",
         },
+        # Row positions in the reference source; matches[].reference_id uses the same numbering.
+        "evaluated_reference_ids": [int(value) for value in ref.eval_id],
         "matches": match_rows,
     }
     return EvaluationResult(report, {
@@ -276,6 +299,9 @@ def main(argv=None):
     for filename, layer in ((args.predictions, args.predictions_layer), (args.reference, args.reference_layer), (args.aoi, args.aoi_layer)):
         frames.append(gpd.read_file(filename, layer=layer) if layer else gpd.read_file(filename))
     result = evaluate(*frames, crs=args.metric_crs, iou_threshold=args.iou_threshold, edge_policy=args.edge_policy)
+    result.report["sources"] = {role: {"path": str(path), "layer": layer} for role, path, layer in
+                                zip(("predictions", "reference", "aoi"), sources,
+                                    (args.predictions_layer, args.reference_layer, args.aoi_layer))}
     if args.output_gpkg:
         write_layers(args.output_gpkg, result.layers, overwrite=args.overwrite)
     output_json = Path(args.output_json)

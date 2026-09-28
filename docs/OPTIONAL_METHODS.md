@@ -16,15 +16,27 @@ This prints the call without importing ArcPy. Add `--execute` to run it. Create 
 
 The runner uses `arcpy.ia.DetectObjectsUsingDeepLearning` with the local package, polygon output (`return_bboxes False`), `NO_NMS`, and mosaicked-image processing. It adds `method=esri_building_usa`. Output is the raw polygon baseline, without regularization. It refuses existing outputs because this Esri tool can append detections. Postprocess and evaluate with the same settings used for the other methods. [Current ArcPy interface](https://pro.arcgis.com/en/pro-app/latest/tool-reference/image-analyst/detect-objects-using-deep-learning.htm)
 
+### Bring Esri output into the comparison
+
+Back in the CPU environment, import the feature class with the `esri` preset:
+
+```powershell
+nbf import-vectors --input 'C:\analysis\results.gdb' --layer esri_buildings --preset esri --crs EPSG:26914 --output outputs/esri_run01/raw.gpkg
+```
+
+The preset labels the method `esri_building_usa` and converts Esri's `Confidence` field to a 0-1 `score`. The Mask R-CNN inference code in `arcgis.learn` writes `Confidence` as a percentage: `score * 100` in `arcgis/learn/models/_inferencing/_maskrcnn_inferencing.py`, checked in arcgis 2.4.3. Esri's generic detector template writes 0-1 instead, so the importer refuses to divide values that are already at most 1; use `--score-scale 1` for such a model. The preset also keeps self-intersecting outlines, which raster-to-polygon conversion can produce, for `nbf clean` to repair and record, exactly as for SAM 3 masks. `source_id` holds each feature's OBJECTID, so any polygon can be found again in ArcGIS Pro.
+
+Then clean with the same settings as the other methods, evaluate against the same reference and AOI, and compare. Because `NO_NMS` keeps the model's overlapping-chip duplicates, cleanup's score-ranked duplicate suppression applies to Esri output too. [Compare Esri with other models](USAGE.md#compare-esri-with-other-models) walks through the whole sequence.
+
 ## Import an existing Nearmap AI building export
 
-Use a locally exported building polygon layer, not a mixed AI-feature layer. The importer requires a known CRS, valid nonempty polygons, and an explicit output CRS. It preserves each Polygon or MultiPolygon as one instance, writes a new GeoPackage layer named `buildings`, and standardizes `source_id` and `method`. Other vendor fields are omitted. Confidence is copied only when its field is supplied and already contains probabilities in `[0,1]`; it is never synthesized.
+Use a locally exported building polygon layer, not a mixed AI-feature layer. The importer requires a known CRS, nonempty polygons, and an explicit output CRS. Invalid polygons are refused unless `--allow-invalid` keeps them for `nbf clean` to repair and record. A source with several layers needs `--layer`. The importer preserves each Polygon or MultiPolygon as one instance, writes a new GeoPackage layer named `buildings`, and standardizes `source_id` and `method`. `source_id` comes from `--id-field`, or else from the source feature ID. Other vendor fields are omitted. Confidence is copied only when its field is supplied and holds scores in `[0,1]`, after an explicit `--score-scale` such as 100 for a percentage; it is never synthesized.
 
 ```powershell
 nbf import-vectors --input data/inputs/nearmap_buildings.gpkg --layer buildings --output outputs/nearmap_ai.gpkg --crs EPSG:26914 --id-field building_id --score-field confidence
 ```
 
-Use the imagery's projected CRS instead of the illustrative EPSG code. Omit optional fields when absent. The same importer accepts Esri output with `--method esri_building_usa`. An export's product, survey date, and licensing context must be supplied separately by its owner; the importer does not infer them.
+Use the imagery's projected CRS instead of the illustrative EPSG code. Omit optional fields when absent. The method label is `--method`, or the preset's, or the input's own `method` field, and these must agree; `nearmap_ai` is the fallback. Import Esri output with `--preset esri`, described above. An export's product, survey date, and licensing context must be supplied separately by its owner; the importer does not infer them.
 
 ## Prepare spatial train, validation, and test data
 

@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=75"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -7,11 +7,16 @@ name = "nearmap-building-footprints"
 version = "0.1.0"
 description = "Local, reproducible building extraction experiments for georeferenced aerial imagery"
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "efkopru" }]
 requires-python = ">=3.12,<3.14"
-dependencies = ["numpy>=2.1,<3", "rasterio>=1.4,<2", "geopandas>=1.1,<2", "shapely>=2.1,<3", "pyproj>=3.7,<4", "scipy>=1.14,<2"]
+# affine>=3 provides the `transform @ point` operator used throughout.
+dependencies = ["numpy>=2.1,<3", "affine>=3,<4", "rasterio>=1.4,<2", "geopandas>=1.1,<2", "shapely>=2.1,<3", "pyproj>=3.7,<4", "scipy>=1.14,<2"]
 
 [project.optional-dependencies]
-test = ["pytest>=8,<10"]
+test = ["pytest>=8,<10", "coverage>=7.10,<8"]
+lint = ["ruff>=0.16,<0.17"]
 sam = ["segment-geospatial[samgeo3]==1.4.2"]
 
 [project.scripts]
@@ -28,3 +33,28 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+filterwarnings = [
+    # A deprecated call in this package fails the suite instead of scrolling past.
+    "error::DeprecationWarning:nearmap_buildings",
+    "error::PendingDeprecationWarning:nearmap_buildings",
+    # rasterio 1.5 still multiplies Affine transforms internally; not ours to fix.
+    "ignore:Use `@` matmul:PendingDeprecationWarning:rasterio",
+]
+
+[tool.coverage.run]
+source = ["nearmap_buildings"]
+branch = true
+# The CLI tests run `python -m nearmap_buildings.cli` in subprocesses; measure those too.
+patch = ["subprocess"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+
+[tool.ruff]
+target-version = "py312"
+
+[tool.ruff.lint]
+# Correctness checks (pyflakes and pycodestyle errors); import order and layout
+# follow the existing code style rather than a formatter.
+select = ["E4", "E7", "E9", "F"]

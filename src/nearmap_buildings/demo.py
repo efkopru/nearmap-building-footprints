@@ -7,7 +7,8 @@ import numpy as np
 import rasterio
 from rasterio.features import rasterize
 from rasterio.transform import from_origin
-from shapely.geometry import Point, box
+from shapely.affinity import translate
+from shapely.geometry import Polygon, box
 
 from .common import write_json
 
@@ -20,7 +21,7 @@ def create_demo(output):
     buildings = []
     for offset in (0, 512, 1024):
         for col, row in [(80, 90), (190, 330), (360, 140)]:
-            xmin, ymax = transform * (offset + col, row)
+            xmin, ymax = transform @ (offset + col, row)
             buildings.append(box(xmin, ymax - 9, xmin + 12, ymax))
     label = rasterize([(g, i + 1) for i, g in enumerate(buildings)], out_shape=(height, width), transform=transform, dtype="uint8")
     rgb = np.zeros((3, height, width), dtype="uint8")
@@ -44,7 +45,27 @@ def create_demo(output):
     predictions["score"] = 1.0
     predictions["method"] = "synthetic_identity_fixture"
     predictions.to_file(output / "perfect_predictions.gpkg", layer="predictions", driver="GPKG")
-    write_json(output / "NOTICE.json", {"synthetic_only": True, "purpose": "CPU pipeline and evaluator checks", "model_inference": False, "accuracy_claim": "None. Perfect predictions are copies of synthetic reference geometries."})
+    # Laid out like Esri's Detect Objects output (a file geodatabase feature class with
+    # Class and a 0-100 Confidence), with the defects of a raw run: a duplicate from
+    # overlapping chips (the tool runs with NO_NMS), a self-intersecting outline, one
+    # missed building (5) and one false detection. No Esri model produced these.
+    esri = []
+    for i, geometry in enumerate(buildings):
+        if i == 5:
+            continue
+        shifted = translate(geometry, 0.3, -0.2)
+        if i == 7:
+            x0, y0, x1, y1 = shifted.bounds
+            shifted = Polygon([(x0, y0), (x1, y0), (x1, y1), (x0, y1), (x0 + 0.2, y0 - 0.2)])
+        esri.append((shifted, 97.5 - i))
+        if i == 2:
+            esri.append((translate(geometry, 0.6, 0.1), 91.0))
+    fx, fy = transform @ (1304, 420)
+    esri.append((box(fx, fy - 6, fx + 8, fy), 62.0))
+    gpd.GeoDataFrame({"Class": "Building", "Confidence": [score for _, score in esri], "method": "esri_building_usa"},
+                     geometry=[geometry for geometry, _ in esri], crs=crs).to_file(
+        output / "esri_format_predictions.gdb", layer="esri_buildings", driver="OpenFileGDB")
+    write_json(output / "NOTICE.json", {"synthetic_only": True, "purpose": "CPU pipeline and evaluator checks", "model_inference": False, "accuracy_claim": "None. Perfect predictions are copies of synthetic reference geometries.", "esri_format_predictions": "Shifted copies of the synthetic reference in Esri's Detect Objects output layout, with a duplicate, a self-intersecting outline, a missed building and a false detection. Not Esri model output."})
     return output
 
 def main(argv=None):

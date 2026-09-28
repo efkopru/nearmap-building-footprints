@@ -10,12 +10,15 @@ import geopandas as gpd
 import numpy as np
 import rasterio
 from rasterio.features import shapes
+from scipy.ndimage import binary_dilation
 from shapely.geometry import box, shape
 from shapely.ops import unary_union
 
 from .common import provenance, read_json, sha256_file, write_json
 
 METHODS = ("text", "exemplar", "box", "point")
+# 8-connected, so a mask pixel diagonal to nodata also counts as touching it.
+NEIGHBORS = np.ones((3, 3), dtype=bool)
 
 def checkpoint_metadata(path, method, checkpoint_hash):
     sidecar = Path(str(path) + ".metadata.json")
@@ -88,7 +91,7 @@ def prompts_for_tile(frame, src, method):
 
 def pixel_box(geom, transform):
     x0, y0, x1, y1 = geom.bounds
-    corners = [(~transform) * p for p in [(x0, y0), (x1, y0), (x0, y1), (x1, y1)]]
+    corners = [(~transform) @ p for p in [(x0, y0), (x1, y0), (x0, y1), (x1, y1)]]
     xs, ys = zip(*corners)
     return [min(xs), min(ys), max(xs), max(ys)]
 
@@ -129,7 +132,7 @@ def predict_tile(model, image_path, method, prompts):
         else:
             groups = []
             for _, group in prompts.groupby("object_id", sort=False):
-                coords = [(~src.transform) * (g.x, g.y) for g in group.geometry]
+                coords = [(~src.transform) @ (g.x, g.y) for g in group.geometry]
                 groups.append((None, coords, group.label.tolist()))
         for bounds, coords, labels in groups:
             masks, scores, _ = model.predict_inst(box=bounds, point_coords=coords, point_labels=labels, multimask_output=True, return_logits=False)
@@ -139,6 +142,9 @@ def predict_tile(model, image_path, method, prompts):
         return result
 
 def vectorize(predictions, valid, transform, tile_id, method, min_pixels, threshold):
+    valid = np.asarray(valid, dtype=bool)
+    invalid = ~valid
+    tile_has_nodata = bool(invalid.any())
     rows = []
     for n, (mask, score) in enumerate(predictions, 1):
         if score < threshold:
@@ -149,7 +155,9 @@ def vectorize(predictions, valid, transform, tile_id, method, min_pixels, thresh
         polygons = [shape(g) for g, value in shapes(mask.astype(np.uint8), mask=mask, transform=transform) if value == 1]
         geometry = unary_union(polygons)
         edge_touch = bool(mask[0].any() or mask[-1].any() or mask[:, 0].any() or mask[:, -1].any())
-        rows.append({"instance_id": f"{tile_id}_{n:06d}", "tile_id": tile_id, "score": score, "edge_touch": edge_touch, "method": f"sam3_{method}", "pixels": int(mask.sum()), "geometry": geometry})
+        # Missing imagery can cut a building just like the tile frame can.
+        nodata_touch = tile_has_nodata and bool((binary_dilation(mask, structure=NEIGHBORS) & invalid).any())
+        rows.append({"instance_id": f"{tile_id}_{n:06d}", "tile_id": tile_id, "score": score, "edge_touch": edge_touch, "nodata_touch": nodata_touch, "method": f"sam3_{method}", "pixels": int(mask.sum()), "geometry": geometry})
     return rows
 
 def parser():
@@ -248,8 +256,11 @@ def run(args, model_factory=None):
                 else:
                     predictions = predict_tile(model, path, args.method, local_prompts)
                 rows = vectorize(predictions, src.dataset_mask() > 0, src.transform, item["id"], args.method, args.min_pixels, args.confidence)
-                columns = ["instance_id", "tile_id", "score", "edge_touch", "method", "pixels", "geometry"]
+                columns = ["instance_id", "tile_id", "score", "edge_touch", "nodata_touch", "method", "pixels", "geometry"]
                 frame = gpd.GeoDataFrame(rows, columns=columns, geometry="geometry", crs=src.crs)
+                # Typed even with no detections, so an empty tile's GeoPackage fields match
+                # the other tiles instead of defaulting to text.
+                frame = frame.astype({"score": "float64", "edge_touch": "bool", "nodata_touch": "bool", "pixels": "int64"})
             temporary = raw / f"{item['id']}.part.gpkg"
             frame.to_file(temporary, layer="predictions", driver="GPKG")
             temporary.replace(vector_path)

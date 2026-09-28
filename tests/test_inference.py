@@ -5,6 +5,7 @@ import sys
 from types import SimpleNamespace
 import geopandas as gpd
 import numpy as np
+import pyogrio
 import pytest
 import rasterio
 from rasterio.transform import from_origin
@@ -54,11 +55,20 @@ def test_cpu_fake_adapter_export_and_resume_integrity(manifest, tmp_path):
     g = gpd.read_file(vectors)
     assert g.crs.to_epsg() == 32614
     assert g.geometry.iloc[0].area == pytest.approx(48 * .25**2)
+    assert not g.nodata_touch.iloc[0]
     args.resume = True
     assert inf.run(args, model_factory=FakeSam)["status"] == "complete"
     args.confidence = .9
     with pytest.raises(ValueError, match="signature changed"):
         inf.run(args, model_factory=FakeSam)
+
+def test_tile_without_detections_keeps_typed_fields(manifest, tmp_path):
+    # FakeSam scores 0.8, so a 0.9 threshold leaves this tile empty.
+    args = inf.parser().parse_args(["--manifest", str(manifest), "--output", str(tmp_path / "out"), "--confidence", "0.9", "--execute"])
+    assert inf.run(args, model_factory=FakeSam)["tiles"][0]["instances"] == 0
+    info = pyogrio.read_info(next((args.output / "raw").glob("*.gpkg")), layer="predictions")
+    types = dict(zip(info["fields"], info["dtypes"]))
+    assert [types[field] for field in ("score", "edge_touch", "nodata_touch", "pixels")] == ["float64", "bool", "bool", "int64"]
 
 def test_mask_holes_instance_ids_and_nodata():
     mask = np.ones((8,8), dtype=bool)
@@ -67,7 +77,19 @@ def test_mask_holes_instance_ids_and_nodata():
     assert len(rows) == 1 and rows[0]["geometry"].area == 60
     assert len(rows[0]["geometry"].interiors) == 1
     assert rows[0]["edge_touch"]
+    assert not rows[0]["nodata_touch"]
     assert inf.vectorize([(mask,.9)], np.zeros_like(mask), from_origin(0,8,1,1), "tile", "text", 1, .5) == []
+
+def test_nodata_touch_flags_masks_cut_by_missing_imagery():
+    valid = np.ones((12,12), dtype=bool)
+    valid[:, 8:] = False  # Outside the capture footprint.
+    cut = np.zeros((12,12), dtype=bool)
+    cut[3:7, 4:8] = True  # Runs up to the nodata columns.
+    clear = np.zeros((12,12), dtype=bool)
+    clear[3:7, 1:4] = True  # Well inside the valid imagery.
+    rows = inf.vectorize([(cut,.9), (clear,.9)], valid, from_origin(0,12,1,1), "tile", "text", 1, .5)
+    assert [row["nodata_touch"] for row in rows] == [True, False]
+    assert not any(row["edge_touch"] for row in rows)
 
 def test_prompt_modes_and_groups(manifest, tmp_path):
     path = tmp_path / "points.geojson"

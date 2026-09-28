@@ -35,6 +35,31 @@ def test_overlap_dedup_keeps_best_score_audits_and_preserves_touching_neighbor()
     assert result.cleaned.geometry.iloc[1].equals(source.geometry.iloc[2])
 
 
+def test_complete_detection_beats_higher_scoring_tile_edge_fragment():
+    # One 20 x 10 m building seen by two overlapping tiles: tile A cut it at its
+    # edge and scored higher; tile B saw all of it.
+    source = frame([box(0, 0, 12, 10), box(0, 0, 20, 10)], score=[0.91, 0.86],
+                   edge_touch=[True, False], tile_id=["A", "B"])
+    result = clean_polygons(source, crs=CRS)
+    assert result.cleaned.tile_id.tolist() == ["B"]
+    assert result.cleaned.geometry.iloc[0].area == 200
+    assert result.removed.tile_id.tolist() == ["A"]
+    assert result.removed.kept_cleanup_id.tolist() == [1]
+    by_score = clean_polygons(source, crs=CRS, duplicate_priority="score")
+    assert by_score.cleaned.tile_id.tolist() == ["A"]
+
+
+def test_nodata_cut_is_truncated_and_missing_flags_count_as_complete():
+    source = frame([box(0, 0, 12, 10), box(0, 0, 20, 10)], score=[0.91, 0.86], nodata_touch=[True, None])
+    assert clean_polygons(source, crs=CRS).cleaned.geometry.iloc[0].area == 200
+
+
+def test_truncation_flags_must_be_boolean():
+    source = frame([box(0, 0, 10, 10)], score=[0.9], edge_touch=["yes"])
+    with pytest.raises(ValueError, match="edge_touch must be boolean"):
+        clean_polygons(source, crs=CRS)
+
+
 def test_containment_removes_low_score_fragment_without_union():
     source = frame([box(0, 0, 10, 10), box(1, 1, 3, 3)], score=[0.9, 0.4])
     result = clean_polygons(source, crs=CRS, min_area=0)
@@ -116,12 +141,24 @@ def test_regularization_rejects_bounds_diagonals_holes_multipart():
 def test_simplification_cannot_bypass_regularization_bound():
     polygon = Polygon([(0, 0), (10, 0), (10, 10), (6, 10), (6, 8), (4, 8), (4, 10), (0, 10)])
     result = clean_polygons(frame([polygon]), crs=CRS, simplify=3, regularize=True, max_displacement=0.1)
-    assert "combined_change_rejected" in result.cleaned.cleanup_flags.iloc[0]
+    # Simplifying alone already exceeds the bound, so both steps are undone and
+    # the flags must not claim a simplification that is no longer there.
+    assert result.cleaned.cleanup_flags.iloc[0].split(";") == ["simplify_reverted", "combined_change_rejected"]
     assert result.cleaned.geometry.iloc[0].equals(polygon)
 
 
+def test_rejected_regularization_keeps_a_simplification_within_bounds():
+    # Simplifying removes a 0.62 m spike; squaring the skewed edges afterwards
+    # moves that corner of the boundary 0.70 m from the original, past 0.65 m.
+    polygon = Polygon([(0, 0), (10.1, 0), (10, 9.8), (1, 10.6), (0, 10)])
+    result = clean_polygons(frame([polygon]), crs=CRS, simplify=0.7, regularize=True, max_displacement=0.65)
+    assert result.cleaned.cleanup_flags.iloc[0].split(";") == ["simplified", "combined_change_rejected"]
+    assert result.cleaned.geometry.iloc[0].equals(polygon.simplify(0.7, preserve_topology=True))
+
+
 @pytest.mark.parametrize("kwargs", [{"simplify": -1}, {"min_area": math.nan}, {"iou_threshold": 0},
-                                   {"max_displacement": math.inf}, {"containment_threshold": 1.01}])
+                                   {"max_displacement": math.inf}, {"containment_threshold": 1.01},
+                                   {"duplicate_priority": "area"}])
 def test_invalid_parameters_fail(kwargs):
     with pytest.raises(ValueError):
         clean_polygons(frame([box(0, 0, 2, 2)]), crs=CRS, **kwargs)

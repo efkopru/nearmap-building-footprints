@@ -1,8 +1,10 @@
 """Conservative CPU polygon cleanup. Original input files are never modified.
 
-Deduplication suppresses lower-score overlapping instances; it never dissolves
-neighbors. Orthogonalization is optional and only attempts already near-orthogonal
-simple rings. Geometry cleanup cannot turn a roof outline into a ground footprint.
+Deduplication keeps one of each set of overlapping instances: by default a complete
+detection (not cut by a tile edge or nodata) before a truncated one, then the higher
+score. It never dissolves neighbors. Orthogonalization is optional and only attempts
+already near-orthogonal simple rings. Geometry cleanup cannot turn a roof outline
+into a ground footprint.
 """
 from __future__ import annotations
 
@@ -19,6 +21,11 @@ from pyproj import CRS
 import shapely
 from shapely.geometry import MultiPolygon, Polygon
 from shapely.strtree import STRtree
+
+
+DUPLICATE_PRIORITIES = ("complete", "score")
+# Raw-mask flags written by inference; either one means the polygon may be cut off.
+TRUNCATION_FLAGS = ("edge_touch", "nodata_touch")
 
 
 def metric_crs(value: str | CRS) -> CRS:
@@ -110,6 +117,32 @@ def conservative_regularize(geometry, max_displacement: float = 0.3,
     return candidate, "regularized" if not candidate.equals_exact(geometry, 1e-9) else "regularize_unchanged"
 
 
+def _within_change_bounds(original, candidate, *, min_area, max_displacement, max_area_change):
+    """Whether candidate stays within the regularization limits of the repaired raw geometry."""
+    if candidate.area < min_area or abs(candidate.area - original.area) / original.area > max_area_change:
+        return False
+    # Polygonal round buffers are conservative subsets of a true distance
+    # buffer. Mutual coverage bounds all boundary points, not only samples.
+    return original.equals(candidate) or (max_displacement > 0
+        and original.boundary.buffer(max_displacement).covers(candidate.boundary)
+        and candidate.boundary.buffer(max_displacement).covers(original.boundary))
+
+
+def _truncated(data: gpd.GeoDataFrame) -> np.ndarray:
+    """True where a raw mask reached a tile edge or nodata; missing flags count as complete."""
+    truncated = np.zeros(len(data), dtype=bool)
+    for column in TRUNCATION_FLAGS:
+        if column not in data:
+            continue
+        for index, value in enumerate(data[column]):
+            if pd.isna(value):
+                continue
+            if value not in (True, False):
+                raise ValueError(f"{column} must be boolean, not {value!r}")
+            truncated[index] |= bool(value)
+    return truncated
+
+
 @dataclass
 class CleanupResult:
     cleaned: gpd.GeoDataFrame
@@ -121,17 +154,22 @@ def clean_polygons(frame: gpd.GeoDataFrame, *, crs: str | CRS,
                    iou_threshold: float = 0.7, containment_threshold: float = 0.98,
                    regularize: bool = False, max_displacement: float = 0.3,
                    max_area_change: float = 0.05,
-                   angle_tolerance: float = 10.0) -> CleanupResult:
-    """Clean then score-prioritize duplicates, without merging adjacent instances.
+                   angle_tolerance: float = 10.0,
+                   duplicate_priority: str = "complete") -> CleanupResult:
+    """Clean then prioritize duplicates, without merging adjacent instances.
 
     A duplicate has positive intersection area and either IoU >= threshold or
-    intersection/min(area1, area2) >= containment_threshold. Missing/nonfinite
-    scores rank last; ties follow input order. Raw files remain the authoritative
-    unmodified geometry record. The removed layer records suppression decisions.
+    intersection/min(area1, area2) >= containment_threshold. With the default
+    "complete" priority, instances flagged edge_touch or nodata_touch rank after
+    complete ones; "score" ranks by score alone. Missing/nonfinite scores rank
+    last; ties follow input order. Raw files remain the authoritative unmodified
+    geometry record. The removed layer records suppression decisions.
     """
     target = metric_crs(crs)
     if frame.crs is None:
         raise ValueError("input CRS is missing; assign the correct source CRS before cleanup")
+    if duplicate_priority not in DUPLICATE_PRIORITIES:
+        raise ValueError(f"duplicate_priority must be one of {DUPLICATE_PRIORITIES}")
     if not all(math.isfinite(value) for value in (min_area, simplify, iou_threshold, containment_threshold)) or min_area < 0 or simplify < 0 or not 0 < iou_threshold <= 1 or not 0 < containment_threshold <= 1:
         raise ValueError("areas/tolerances must be nonnegative and overlap thresholds in (0, 1]")
     if not all(math.isfinite(value) for value in (max_displacement, max_area_change, angle_tolerance)) or max_displacement < 0 or not 0 <= max_area_change <= 1 or not 0 < angle_tolerance < 45:
@@ -176,7 +214,10 @@ def clean_polygons(frame: gpd.GeoDataFrame, *, crs: str | CRS,
     tree = STRtree(geometries)
     scores = pd.to_numeric(data["score"], errors="coerce") if "score" in data else pd.Series(np.nan, index=data.index)
     scores = scores.where(np.isfinite(scores), -np.inf)
-    priority = sorted(candidates, key=lambda index: (-float(scores.iloc[index]), index))
+    # At a tile seam the copy cut by one tile's edge can outscore the whole
+    # building seen by its neighbor, so completeness outranks score by default.
+    truncated = _truncated(data) if duplicate_priority == "complete" else np.zeros(len(data), dtype=bool)
+    priority = sorted(candidates, key=lambda index: (bool(truncated[index]), -float(scores.iloc[index]), index))
     kept = set()
     rank = {index: place for place, index in enumerate(priority)}
     for index in priority:
@@ -200,6 +241,7 @@ def clean_polygons(frame: gpd.GeoDataFrame, *, crs: str | CRS,
             kept.add(index)
     # Suppression uses repaired raw masks, so simplification does not manufacture
     # or erase overlap evidence. Never union, snap, or dissolve neighboring masks.
+    limits = {"min_area": min_area, "max_displacement": max_displacement, "max_area_change": max_area_change}
     for index in sorted(kept):
         original = data.geometry.iloc[index]
         geometry = original
@@ -215,18 +257,17 @@ def clean_polygons(frame: gpd.GeoDataFrame, *, crs: str | CRS,
             candidate, flag = conservative_regularize(geometry, max_displacement, max_area_change, angle_tolerance)
             # Bound the combined simplify+regularize change against repaired raw
             # geometry too. No simplification loophole in the regularization gate.
-            change = abs(candidate.area - original.area) / original.area
-            # Polygonal round buffers are conservative subsets of a true distance
-            # buffer. Mutual coverage bounds all boundary points, not only samples.
-            bounded = original.equals(candidate) or (max_displacement > 0
-                and original.boundary.buffer(max_displacement).covers(candidate.boundary)
-                and candidate.boundary.buffer(max_displacement).covers(original.boundary))
-            if candidate.area < min_area or change > max_area_change or not bounded:
-                geometry = original
-                flags.append("combined_change_rejected")
-            else:
+            if _within_change_bounds(original, candidate, **limits):
                 geometry = candidate
                 flags.append(flag)
+            elif geometry is not original and _within_change_bounds(original, geometry, **limits):
+                # Only regularizing pushed the change past the limits: keep the simplification.
+                flags.append("combined_change_rejected")
+            else:
+                if "simplified" in flags:
+                    flags[flags.index("simplified")] = "simplify_reverted"
+                geometry = original
+                flags.append("combined_change_rejected")
         data.at[index, data.geometry.name] = geometry
         data.at[index, "area_m2"] = geometry.area
         data.at[index, "cleanup_flags"] = ";".join(flags)
@@ -235,6 +276,10 @@ def clean_polygons(frame: gpd.GeoDataFrame, *, crs: str | CRS,
 
 def read_polygon_inputs(path: str | Path, layer: str | None = None) -> tuple[gpd.GeoDataFrame, list[Path]]:
     source = Path(path)
+    if source.suffix.lower() == ".gdb":
+        # Esri's Confidence (0-100) and outline repair need the importer's handling first.
+        raise ValueError("Import a file geodatabase layer first, e.g. nbf import-vectors --input "
+                         f"{source.name} --layer <feature class> --preset esri --crs <EPSG> --output <new .gpkg>")
     # Inference receipts are JSON sidecars; interrupted writes use *.part.gpkg.
     # Neither is a completed prediction dataset. A standalone .json GeoJSON can
     # still be supplied explicitly, without guessing the meaning of sidecars.
@@ -284,6 +329,9 @@ def main(argv=None):
     parser.add_argument("--simplify-m", type=float, default=0.0)
     parser.add_argument("--iou-threshold", type=float, default=0.7)
     parser.add_argument("--containment-threshold", type=float, default=0.98)
+    parser.add_argument("--duplicate-priority", choices=DUPLICATE_PRIORITIES, default="complete",
+                        help="complete: keep detections not cut by a tile edge or nodata first, then higher score; "
+                             "score: higher score only")
     parser.add_argument("--regularize", action="store_true", help="attempt a bounded near-orthogonal fit")
     parser.add_argument("--max-displacement-m", type=float, default=0.3)
     parser.add_argument("--max-area-change", type=float, default=0.05, help="relative area change, e.g. 0.05 = 5%%")
@@ -298,10 +346,11 @@ def main(argv=None):
                             simplify=args.simplify_m, iou_threshold=args.iou_threshold,
                             containment_threshold=args.containment_threshold, regularize=args.regularize,
                             max_displacement=args.max_displacement_m, max_area_change=args.max_area_change,
-                            angle_tolerance=args.angle_tolerance_deg)
+                            angle_tolerance=args.angle_tolerance_deg, duplicate_priority=args.duplicate_priority)
     write_layers(output, {"cleaned": result.cleaned, "removed_audit": result.removed}, overwrite=args.overwrite)
     print(json.dumps({"input_count": len(frame), "cleaned_count": len(result.cleaned),
-                      "removed_count": len(result.removed), "raw_inputs_preserved": True}))
+                      "removed_count": len(result.removed), "duplicate_priority": args.duplicate_priority,
+                      "raw_inputs_preserved": True}))
 
 
 if __name__ == "__main__":

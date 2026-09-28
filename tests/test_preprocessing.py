@@ -21,7 +21,7 @@ def test_overlap_preserves_pixels_crs_and_coverage(raster, tmp_path):
             row, col, h, w = [item[k] for k in ["row_off", "col_off", "height", "width"]]
             with rasterio.open(output / item["path"]) as part:
                 assert part.crs == src.crs
-                assert part.transform * (0, 0) == src.transform * (col, row)
+                assert part.transform @ (0, 0) == src.transform @ (col, row)
                 np.testing.assert_array_equal(part.read(), src.read()[:, row:row+h, col:col+w])
             coverage[row:row+h, col:col+w] += 1
     assert coverage.min() >= 1
@@ -29,6 +29,18 @@ def test_overlap_preserves_pixels_crs_and_coverage(raster, tmp_path):
     assert manifest["status"] == "complete"
     with pytest.raises(FileExistsError):
         tile(raster, output)
+
+@pytest.mark.parametrize("width", [1100, 1920, 2000, 5000])
+def test_edge_windows_stay_full_size_with_at_least_the_requested_overlap(width):
+    tiles = list(windows(width, 1024, 1024, 128))
+    assert all((w.width, w.height) == (1024, 1024) for w in tiles)
+    starts = [int(w.col_off) for w in tiles]
+    assert starts == sorted(set(starts))
+    assert starts[0] == 0 and starts[-1] == width - 1024
+    assert all(1024 - (right - left) >= 128 for left, right in zip(starts, starts[1:]))
+
+def test_raster_smaller_than_a_tile_is_one_window():
+    assert [(w.width, w.height) for w in windows(300, 200, 1024, 128)] == [(300, 200)]
 
 def test_reject_invalid_overlap():
     for size, overlap in [(0, 0), (16, 16), (16, -1)]:
