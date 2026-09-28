@@ -10,7 +10,7 @@ import geopandas as gpd
 import numpy as np
 import rasterio
 from rasterio.features import shapes
-from scipy.ndimage import binary_dilation
+from scipy.ndimage import binary_dilation, label
 from shapely.geometry import box, shape
 from shapely.ops import unary_union
 
@@ -19,6 +19,19 @@ from .common import provenance, read_json, sha256_file, write_json
 METHODS = ("text", "exemplar", "box", "point")
 # 8-connected, so a mask pixel diagonal to nodata also counts as touching it.
 NEIGHBORS = np.ones((3, 3), dtype=bool)
+# Masked patches smaller than this are specks of pure-black imagery (a nodata value of 0
+# also hits the darkest shadow pixels), not missing imagery that could cut a building.
+MIN_GAP_PIXELS = 256
+
+
+def imagery_gaps(valid, min_pixels=MIN_GAP_PIXELS):
+    """Invalid pixels in connected patches of at least min_pixels, or None if there are none."""
+    labels, _ = label(~valid, structure=NEIGHBORS)
+    sizes = np.bincount(labels.ravel())
+    keep = sizes >= min_pixels
+    keep[0] = False  # Label 0 is the valid imagery.
+    gaps = keep[labels]
+    return gaps if gaps.any() else None
 
 def checkpoint_metadata(path, method, checkpoint_hash):
     sidecar = Path(str(path) + ".metadata.json")
@@ -141,10 +154,9 @@ def predict_tile(model, image_path, method, prompts):
                 result.append(max(choices, key=lambda pair: pair[1]))
         return result
 
-def vectorize(predictions, valid, transform, tile_id, method, min_pixels, threshold):
+def vectorize(predictions, valid, transform, tile_id, method, min_pixels, threshold, min_gap_pixels=MIN_GAP_PIXELS):
     valid = np.asarray(valid, dtype=bool)
-    invalid = ~valid
-    tile_has_nodata = bool(invalid.any())
+    gaps = imagery_gaps(valid, min_gap_pixels) if not valid.all() else None
     rows = []
     for n, (mask, score) in enumerate(predictions, 1):
         if score < threshold:
@@ -156,7 +168,7 @@ def vectorize(predictions, valid, transform, tile_id, method, min_pixels, thresh
         geometry = unary_union(polygons)
         edge_touch = bool(mask[0].any() or mask[-1].any() or mask[:, 0].any() or mask[:, -1].any())
         # Missing imagery can cut a building just like the tile frame can.
-        nodata_touch = tile_has_nodata and bool((binary_dilation(mask, structure=NEIGHBORS) & invalid).any())
+        nodata_touch = gaps is not None and bool((binary_dilation(mask, structure=NEIGHBORS) & gaps).any())
         rows.append({"instance_id": f"{tile_id}_{n:06d}", "tile_id": tile_id, "score": score, "edge_touch": edge_touch, "nodata_touch": nodata_touch, "method": f"sam3_{method}", "pixels": int(mask.sum()), "geometry": geometry})
     return rows
 

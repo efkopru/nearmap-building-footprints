@@ -43,10 +43,12 @@ def run_esri(raster, model, output, *, threshold=0.5, batch_size=4, padding=128,
         raise FileExistsError(f"Output feature class exists: {output}")
     if not arcpy.Exists(str(output.parent)):
         raise ValueError("Create the output folder or file geodatabase before running")
-    description = arcpy.Describe(str(raster))
-    if getattr(description, "bandCount", None) != 3 or getattr(description, "pixelType", None) != "U8":
+    # Describe only reports pixelType per band for multiband rasters; a Raster object
+    # reports band count, pixel type and coordinate system for the whole dataset.
+    image = arcpy.Raster(str(raster))
+    if image.bandCount != 3 or image.pixelType != "U8":
         raise ValueError("Esri USA model expects 3-band unsigned 8-bit orthorectified RGB imagery")
-    if getattr(description.spatialReference, "name", "Unknown") == "Unknown":
+    if getattr(image.spatialReference, "name", "Unknown") == "Unknown":
         raise ValueError("Input raster must have a known coordinate system")
     if arcpy.CheckExtension("ImageAnalyst") != "Available":
         raise RuntimeError("An available ArcGIS Image Analyst license is required")

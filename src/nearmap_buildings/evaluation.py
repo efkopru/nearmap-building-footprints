@@ -27,6 +27,11 @@ from .postprocess import metric_crs, polygon_parts, write_layers
 
 
 ROW_ORDER_FINGERPRINT_METHOD = "sha256-normalized-wkb-source-crs-row-order-v1"
+# What the reference is. Only an independent, completely labeled holdout measures accuracy.
+REFERENCE_REQUIREMENTS = {
+    "independent_holdout": "Independent annotated holdout; AOI completely labeled. Independence is asserted by the operator, not inferred by this program. No pseudo-label validation.",
+    "agreement_only": "An existing inventory the operator marks as possibly outdated or incomplete. The metrics measure agreement with it, not accuracy: an unmatched prediction may be a real building missing from the inventory.",
+}
 
 
 def _normalized_wkb(geometry) -> bytes:
@@ -180,15 +185,18 @@ def _summary(values):
 
 def evaluate(predictions: gpd.GeoDataFrame, reference: gpd.GeoDataFrame,
              aoi: gpd.GeoDataFrame, *, crs: str, iou_threshold: float = 0.5,
-             edge_policy: str = "exclude") -> EvaluationResult:
+             edge_policy: str = "exclude", reference_status: str = "independent_holdout") -> EvaluationResult:
     """Evaluate independently labeled objects, never model-generated pseudo-labels.
 
     This API cannot prove label independence; the caller must establish provenance.
-    CLI users must explicitly acknowledge an independent, completely labeled AOI.
+    CLI users must explicitly acknowledge an independent, completely labeled AOI, or
+    declare the reference an existing inventory so the report records agreement only.
     Empty dataframes are valid; malformed rows are errors. Undefined ratios are null.
     """
     if not 0 < iou_threshold <= 1 or edge_policy not in {"exclude", "clip"}:
         raise ValueError("IoU must be in (0, 1] and edge policy must be exclude or clip")
+    if reference_status not in REFERENCE_REQUIREMENTS:
+        raise ValueError(f"reference_status must be one of {sorted(REFERENCE_REQUIREMENTS)}")
     target = metric_crs(crs)
     pred = _validate(predictions, "predictions", target)
     ref = _validate(reference, "reference", target)
@@ -227,7 +235,8 @@ def evaluate(predictions: gpd.GeoDataFrame, reference: gpd.GeoDataFrame,
         "reference_order_fingerprint": row_order_fingerprint(reference),
         "aoi_fingerprint": geometry_fingerprint(aoi),
         "fingerprint_definition": "SHA-256 of source CRS and sorted normalized WKB geometries, including duplicate features. Independent of row order, ring start/direction, and multipart order; exact coordinates retained. Attributes excluded. This is input identity, not proof of annotation independence. reference_order_fingerprint hashes the same geometries in row order, so reference_id values keep pointing at the same buildings.",
-        "reference_requirement": "Independent annotated holdout; AOI completely labeled. Independence is asserted by the operator, not inferred by this program. No pseudo-label validation.",
+        "reference_status": reference_status,
+        "reference_requirement": REFERENCE_REQUIREMENTS[reference_status],
         "metric_crs": target.to_string(), "iou_threshold": iou_threshold,
         "edge_policy": edge_policy,
         "edge_policy_definition": "exclude: retain whole objects covered by AOI, including boundary-touching objects; exclude crossings. clip: intersect both datasets with AOI and retain one identity per original object. Zero-area intersections are outside.",
@@ -282,8 +291,11 @@ def main(argv=None):
     parser.add_argument("--output-gpkg", help="optional matched, unmatched, and AOI-excluded objects")
     parser.add_argument("--iou-threshold", type=float, default=0.5)
     parser.add_argument("--edge-policy", choices=["exclude", "clip"], default="exclude")
-    parser.add_argument("--independent-holdout", action="store_true", required=True,
+    status = parser.add_mutually_exclusive_group(required=True)
+    status.add_argument("--independent-holdout", action="store_true",
                         help="acknowledge independent annotations and complete labels within AOI, not pseudo-labels")
+    status.add_argument("--agreement-only", action="store_true",
+                        help="the reference is an existing inventory that may be outdated or incomplete; report agreement, not accuracy")
     parser.add_argument("--overwrite", action="store_true")
     args = parser.parse_args(argv)
     sources = [Path(value).resolve() for value in (args.predictions, args.reference, args.aoi)]
@@ -298,7 +310,8 @@ def main(argv=None):
     frames = []
     for filename, layer in ((args.predictions, args.predictions_layer), (args.reference, args.reference_layer), (args.aoi, args.aoi_layer)):
         frames.append(gpd.read_file(filename, layer=layer) if layer else gpd.read_file(filename))
-    result = evaluate(*frames, crs=args.metric_crs, iou_threshold=args.iou_threshold, edge_policy=args.edge_policy)
+    result = evaluate(*frames, crs=args.metric_crs, iou_threshold=args.iou_threshold, edge_policy=args.edge_policy,
+                      reference_status="agreement_only" if args.agreement_only else "independent_holdout")
     result.report["sources"] = {role: {"path": str(path), "layer": layer} for role, path, layer in
                                 zip(("predictions", "reference", "aoi"), sources,
                                     (args.predictions_layer, args.reference_layer, args.aoi_layer))}

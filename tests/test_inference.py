@@ -81,15 +81,24 @@ def test_mask_holes_instance_ids_and_nodata():
     assert inf.vectorize([(mask,.9)], np.zeros_like(mask), from_origin(0,8,1,1), "tile", "text", 1, .5) == []
 
 def test_nodata_touch_flags_masks_cut_by_missing_imagery():
-    valid = np.ones((12,12), dtype=bool)
-    valid[:, 8:] = False  # Outside the capture footprint.
-    cut = np.zeros((12,12), dtype=bool)
-    cut[3:7, 4:8] = True  # Runs up to the nodata columns.
-    clear = np.zeros((12,12), dtype=bool)
-    clear[3:7, 1:4] = True  # Well inside the valid imagery.
-    rows = inf.vectorize([(cut,.9), (clear,.9)], valid, from_origin(0,12,1,1), "tile", "text", 1, .5)
+    valid = np.ones((40,40), dtype=bool)
+    valid[:, 30:] = False  # Outside the capture footprint: a real 400-pixel gap.
+    cut = np.zeros((40,40), dtype=bool)
+    cut[10:20, 20:30] = True  # Runs up to the gap.
+    clear = np.zeros((40,40), dtype=bool)
+    clear[10:20, 5:15] = True  # Well inside the valid imagery.
+    rows = inf.vectorize([(cut,.9), (clear,.9)], valid, from_origin(0,40,1,1), "tile", "text", 1, .5)
     assert [row["nodata_touch"] for row in rows] == [True, False]
     assert not any(row["edge_touch"] for row in rows)
+
+def test_isolated_black_pixels_are_not_imagery_gaps():
+    valid = np.ones((40,40), dtype=bool)
+    valid[15, 15] = False  # One pure-black shadow pixel, masked by a nodata value of 0.
+    mask = np.zeros((40,40), dtype=bool)
+    mask[10:15, 10:20] = True  # Borders that pixel.
+    rows = inf.vectorize([(mask,.9)], valid, from_origin(0,40,1,1), "tile", "text", 1, .5)
+    assert rows[0]["nodata_touch"] is False
+    assert inf.imagery_gaps(valid) is None
 
 def test_prompt_modes_and_groups(manifest, tmp_path):
     path = tmp_path / "points.geojson"

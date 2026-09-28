@@ -31,6 +31,13 @@ configs/*.local.yml
 *.tif
 *.tiff
 *.vrt
+# Sidecars GDAL and ArcGIS write next to imagery (statistics, pyramids, world files, metadata).
+*.aux.xml
+*.ovr
+*.tfw
+*.tif.xml
+*.jp2
+*.ecw
 *.gpkg
 *.gdb/
 *.pem

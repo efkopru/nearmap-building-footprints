@@ -152,6 +152,23 @@ def test_cli_writes_json_and_all_six_layers_without_altering_inputs(tmp_path):
     assert {role: (tmp_path / f"{role}.gpkg").read_bytes() for role in source} == before
 
 
+def test_agreement_only_reports_say_so_and_holdout_is_the_default():
+    reference = frame([box(0, 0, 10, 10)])
+    default = evaluate(frame([box(0, 0, 10, 10)]), reference, aoi(), crs=CRS).report
+    agreement = evaluate(frame([box(0, 0, 10, 10)]), reference, aoi(), crs=CRS, reference_status="agreement_only").report
+    assert default["reference_status"] == "independent_holdout"
+    assert agreement["reference_status"] == "agreement_only"
+    assert "not accuracy" in agreement["reference_requirement"]
+    with pytest.raises(ValueError, match="reference_status"):
+        evaluate(frame([]), frame([]), aoi(), crs=CRS, reference_status="ground_truth")
+
+
+def test_cli_takes_exactly_one_reference_status(tmp_path):
+    with pytest.raises(SystemExit):
+        main(["--predictions", "a.gpkg", "--reference", "b.gpkg", "--aoi", "c.gpkg", "--metric-crs", CRS,
+              "--output-json", str(tmp_path / "metrics.json"), "--independent-holdout", "--agreement-only"])
+
+
 def test_cli_requires_independent_holdout_acknowledgement(tmp_path):
     with pytest.raises(SystemExit):
         main(["--predictions", "a.gpkg", "--reference", "b.gpkg", "--aoi", "c.gpkg",

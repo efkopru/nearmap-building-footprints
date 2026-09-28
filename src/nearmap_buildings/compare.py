@@ -25,8 +25,14 @@ CSV_FIELDS = ("label", "report", "true_positives", "false_positives", "false_neg
               "evaluated_predictions", "evaluated_reference", "excluded_predictions",
               "excluded_reference", "clipped_predictions", "clipped_reference",
               "predictions_fingerprint", "reference_fingerprint", "aoi_fingerprint", "metric_crs",
-              "iou_threshold", "edge_policy")
+              "iou_threshold", "edge_policy", "reference_status")
 FINGERPRINT_PATTERN = re.compile(r"[0-9a-f]{64}")
+REFERENCE_STATUSES = ("independent_holdout", "agreement_only")
+
+
+def _reference_status(report):
+    # Reports written before --agreement-only existed could only be independent holdouts.
+    return report.get("reference_status", "independent_holdout")
 PER_BUILDING_FIELDS = ("eval_id", "found_by", "found_count", "outcome")
 
 
@@ -56,6 +62,8 @@ def _validate_report(report, path):
     predictions = report.get("predictions_fingerprint")
     if predictions is not None and (not isinstance(predictions, str) or not FINGERPRINT_PATTERN.fullmatch(predictions)):
         raise ValueError(f"{path}: invalid predictions_fingerprint")
+    if _reference_status(report) not in REFERENCE_STATUSES:
+        raise ValueError(f"{path}: reference_status must be one of {REFERENCE_STATUSES}")
     if not isinstance(report["metric_crs"], str) or not report["metric_crs"]:
         raise ValueError(f"{path}: missing metric CRS")
     _number(report["iou_threshold"], "iou_threshold", ratio=True)
@@ -79,6 +87,8 @@ def _load_reports(paths):
         reports.append(report)
     for path, report in zip(paths[1:], reports[1:]):
         mismatches = [field for field in COMPATIBILITY_FIELDS if report[field] != reports[0][field]]
+        if _reference_status(report) != _reference_status(reports[0]):
+            mismatches.append("reference_status")
         if mismatches:
             raise ValueError(f"{path}: incompatible evaluation report ({', '.join(mismatches)}); reports must use the same holdout and settings")
     return reports
@@ -124,7 +134,8 @@ def compare_reports(paths, labels=None):
                    "clipped_predictions": report["clipped_counts"]["predictions"],
                    "clipped_reference": report["clipped_counts"]["reference"],
                    "predictions_fingerprint": report.get("predictions_fingerprint"),
-                   **{field: report[field] for field in ("reference_fingerprint", "aoi_fingerprint", "metric_crs", "iou_threshold", "edge_policy")}}
+                   **{field: report[field] for field in ("reference_fingerprint", "aoi_fingerprint", "metric_crs", "iou_threshold", "edge_policy")},
+                   "reference_status": _reference_status(report)}
             for field, value in row.items():
                 if field.startswith("matched_"):
                     _number(value, field, nullable=True)
