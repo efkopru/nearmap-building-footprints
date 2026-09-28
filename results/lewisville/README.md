@@ -1,26 +1,43 @@
 # Lewisville, Texas: results so far
 
-This page compares SAM 3 and Esri's building model on Nearmap's May 2026 imagery of Lewisville (10.16 cm). **Every score here measures agreement with the city's building outlines collected in 2015 or earlier, not accuracy.** Accuracy comes once two sample areas are reviewed against the 2026 imagery. Maps of the results stay in a private report because the imagery is licensed; this page has aggregate numbers only.
+This page compares SAM 3 and Esri's building model on Nearmap's May 2026 imagery of Lewisville (10.16 cm), across the whole city and on an Old Town sample. **Every score here measures agreement with the city's building outlines collected in 2015 or earlier, not accuracy.** Accuracy comes once two sample areas are reviewed against the 2026 imagery. Screenshots of the results stay in a private report because the imagery is licensed; this page has aggregate numbers and imagery-free charts only.
 
 ## Key findings
 
-- **Houses are found.** City-wide, the city's Esri run matches 94% of the 2015 outlines of 100 m² and up. In residential streets, SAM 3 and Esri outline nearly the same houses.
-- **Sheds are missed.** No method reliably finds structures under 20 m². Esri's city run matched 2 of 7,867 such outlines.
-- **Large buildings break up.** Buildings longer than a processing tile come out in pieces: SAM 3 finds only parts, and Esri's outlines are cut at its chip edges.
-- **SAM 3's settings matter.** On main buildings in Old Town, 1536 px tiles, the prompt "building" and a 0.7 cut-off raised its F1 to 0.53, from 0.46 with the best 1024 px setting. That ties the local Esri run and trails the city's Esri run at 0.61.
+- **Esri leads on main buildings.** City-wide F1 on buildings of 20 m² and up: the city's Esri run 0.83, SAM 3 0.74. Recall is close (0.85 against 0.82); SAM 3 draws more outlines that the 2015 layer lacks (precision 0.68 against 0.82).
+- **The two models mostly agree.** 91% of Esri's outlines have a matching SAM 3 outline, and both find 94% and 90% of the 2015 outlines of 100 m² and up. Matched to the 2015 outlines, SAM 3's outlines fit slightly more tightly (median IoU 0.80 against 0.77).
+- **SAM 3 finds more small structures, but sheds are still missed.** Of the 7,867 2015 outlines under 20 m², SAM 3 matched 267 and Esri 2; 7,599 were found by neither.
+- **Many extra outlines are likely new buildings.** 4,923 of SAM 3's outlines with no 2015 match also match an Esri outline, such as whole subdivisions built since 2015.
+- **Large buildings break up.** Buildings longer than a processing tile come out in pieces: SAM 3 finds only parts or splits them where tiles meet, and Esri's outlines are cut at its chip edges.
+- **SAM 3's settings matter.** On main buildings in Old Town, 1536 px tiles, the prompt "building" and a 0.7 cut-off raised its F1 to 0.53, from 0.46 with the best 1024 px setting. Those settings were used for the city-wide run.
 
-## City-wide: the city's Esri run against the 2015 outlines
+## City-wide: SAM 3 and Esri against the 2015 outlines
 
-The city ran Esri's Building Footprint Extraction – USA model on the same May 2026 capture. Scored against the 38,882 older outlines inside the city limits: 26,502 matched, 6,106 Esri buildings with no 2015 outline, 12,380 2015 outlines unmatched. Precision 0.81, recall 0.68, F1 0.74, median IoU of matches 0.77.
+The city ran Esri's Building Footprint Extraction – USA model on the same May 2026 capture. SAM 3 ran on all 6,538 tiles of 1536 px covering the city, with the best settings from the preliminary Old Town runs: the prompt "building" and a 0.7 confidence cut-off. Both went through the same cleanup and are scored against the 38,882 older outlines inside the city limits. The numbers are also in [citywide_scores.csv](citywide_scores.csv) and [citywide_by_size.csv](citywide_by_size.csv).
 
-| Building size | 2015 outlines | Found by Esri | Share |
-|---|---|---|---|
-| under 20 m² | 7,867 | 2 | 0.0% |
-| 20–50 m² | 2,346 | 194 | 8.3% |
-| 50–100 m² | 1,710 | 896 | 52.4% |
-| 100 m² and up | 26,959 | 25,410 | 94.3% |
+| Method | Outlines | Matched | Extra | Missed | Precision | Recall | F1 | F1, 20 m² and up | Median IoU |
+|---|---|---|---|---|---|---|---|---|---|
+| Esri, city run | 32,608 | 26,502 | 6,106 | 12,380 | 0.81 | 0.68 | 0.74 | 0.83 | 0.77 |
+| SAM 3 | 37,906 | 25,758 | 12,148 | 13,124 | 0.68 | 0.66 | 0.67 | 0.74 | 0.80 |
 
-Most unmatched 2015 outlines are sheds: 10,017 of the 12,380 are under 50 m². The Esri buildings with no 2015 outline likely include buildings built since 2015.
+Extra outlines are not all errors: many are buildings built since 2015.
+
+![Column chart: share of the 2015 outlines each model found, by building size](city_recall_by_size.svg)
+
+| Building size | 2015 outlines | Found by Esri | Found by SAM 3 | Found by both | Only Esri | Only SAM 3 | Missed by both |
+|---|---|---|---|---|---|---|---|
+| under 20 m² | 7,867 | 2 (0.0%) | 267 (3.4%) | 1 | 1 | 266 | 7,599 |
+| 20–50 m² | 2,346 | 194 (8.3%) | 577 (24.6%) | 107 | 87 | 470 | 1,682 |
+| 50–100 m² | 1,710 | 896 (52.4%) | 669 (39.1%) | 530 | 366 | 139 | 675 |
+| 100 m² and up | 26,959 | 25,410 (94.3%) | 24,245 (89.9%) | 23,947 | 1,463 | 298 | 1,251 |
+
+![Stacked bars: what happened to each 2015 outline, by building size](city_outcomes_by_size.svg)
+
+Of the 38,882 2015 outlines, both models found 24,585, Esri alone 1,917, SAM 3 alone 1,173 and neither 11,207. Most of those missed by both are sheds under 20 m²; some others have been demolished since 2015.
+
+**SAM 3 against Esri, without the 2015 outlines.** Matched to each other at IoU ≥ 0.5: 29,567 pairs, with a median IoU of 0.81. 91% of Esri's outlines have a SAM 3 match and 78% of SAM 3's have an Esri match. Of SAM 3's 12,148 outlines with no 2015 match, 4,923 match an Esri outline. Where two independent models agree and no 2015 outline matches, the building is most likely new or changed since 2015.
+
+**What the screenshots show.** The private report has eight screenshots: two typical areas and six picked by rule, each the 300 m square with the most of one kind of difference. In a new subdivision with no 2015 outlines, both models outline every house. At an apartment complex, Esri outlines long carport and garage rows that SAM 3 mostly misses. On older streets, SAM 3 outlines more back-yard garages and sheds. Long industrial roofs are split where SAM 3's tiles meet. Some 2015 outlines sit in empty fields, where buildings have since been demolished.
 
 ## Old Town sample: the untuned baseline
 
@@ -76,27 +93,28 @@ Bigger tiles and higher cut-offs help. The best cut-off, 0.7, is the top of the 
 
 ## Runtime on a laptop RTX 4050 (6 GB)
 
-| Run | Area or tiles | Time | City-wide estimate |
+| Run | Area or tiles | Time | City-wide |
 |---|---|---|---|
-| SAM 3, 1024 px tiles | 90 tiles | 105 s (0.82 s per tile) | about 3.3 h for 14,491 tiles |
-| SAM 3, 1536 px tiles | 36 tiles | 93 s, including model loading | about 3.5 h |
-| SAM 3, 2048 px tiles | 25 tiles | 126 s, including model loading | about 4 h |
-| Esri, local raw run | 0.64 km² | 4.9 min | about 15 h |
+| SAM 3, 1024 px tiles | 90 tiles (Old Town) | 105 s (0.82 s per tile) | about 3.3 h, estimated |
+| SAM 3, 1536 px tiles | 6,538 tiles (whole city) | 2 h 41 min (median 1.08 s of model time per tile) | measured |
+| Esri, local raw run | 0.64 km² (Old Town) | 4.9 min | about 20 h in 150 chunks, running now |
 
-SAM 3 used up to 96% of the GPU's memory.
+SAM 3 used up to 96% of the GPU's memory, close to the limit but stable through the city-wide run.
 
 ## How this was run
 
 - **Imagery:** a Nearmap mosaic from May 2026, 10.16 cm, clipped to the city limits. Its GeoTIFF declared a local CRS in metres; it is EPSG:2276 in US survey feet, corrected through a VRT and checked against the city limits.
 - **Reference:** the City of Lewisville's public building outlines, collected in 2015 or earlier. They align with the imagery to within about 0.4 m.
 - **Methods:**
-  - **SAM 3:** a text prompt through SamGeo 1.4.2, at a pinned commit.
+  - **SAM 3:** a text prompt through SamGeo 1.4.2, at a pinned commit. The city-wide run used 1536 px tiles overlapping by 192 px, the prompt "building" and a 0.7 cut-off.
   - **Esri, city run:** Building Footprint Extraction – USA through `ExtractFeaturesUsingAIModels` with default settings, published by the city.
-  - **Esri, local raw run:** the same model through `DetectObjectsUsingDeepLearning` without NMS.
+  - **Esri, local raw run:** the same model through `DetectObjectsUsingDeepLearning` without NMS. City-wide it runs in 150 overlapping chunks of about 1.1 km; each chunk keeps only the outlines centred in its own core.
 - **Scoring,** identical for every method: EPSG:26914, 4 m² minimum, duplicate suppression, one-to-one matching at IoU ≥ 0.5, and buildings crossing an area's edge excluded.
+- **Screenshot areas** were picked by a fixed rule and kept at least 500 m from both review areas, so the reviews stay independent of the models.
 
 ## Next
 
-1. Review Old Town's outlines against the 2026 imagery, then choose each model's settings by the fixed rule.
-2. Review the test area, a 700 m square chosen by a seeded random rule, and score the frozen settings there once. That is the accuracy result.
-3. Then decide on city-wide runs, and on fine-tuning if sheds matter.
+1. The local Esri city run finishes in about a day; its city-wide scores will be added here.
+2. Review Old Town's outlines against the 2026 imagery, then choose each model's settings by the fixed rule. A new cut-off needs only cleanup; a new prompt or tile size means rerunning SAM 3 on the city, under 3 hours.
+3. Review the test area, a 700 m square chosen by a seeded random rule, and score the frozen settings there once. That is the accuracy result.
+4. Decide on fine-tuning if sheds matter: neither model finds most of them.

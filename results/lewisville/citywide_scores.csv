@@ -1,0 +1,5 @@
+method,buildings,matched,extra,missed,precision,recall,f1,median_iou
+"Esri, city run",all sizes,26502,6106,12380,0.8127,0.6816,0.7414,0.7748
+"Esri, city run",20 m² and up,26496,6011,4519,0.8151,0.8543,0.8342,0.7749
+SAM 3,all sizes,25758,12148,13124,0.6795,0.6625,0.6709,0.7956
+SAM 3,20 m² and up,25482,11990,5533,0.68,0.8216,0.7441,0.7969
