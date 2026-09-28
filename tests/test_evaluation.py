@@ -4,7 +4,7 @@ import geopandas as gpd
 import pytest
 from shapely.geometry import Polygon, box
 
-from nearmap_buildings.evaluation import evaluate, main, maximum_cardinality_matches
+from nearmap_buildings.evaluation import evaluate, geometry_fingerprint, main, maximum_cardinality_matches
 
 
 CRS = "EPSG:26914"
@@ -57,6 +57,30 @@ def test_known_boundary_distance_area_error_and_iou():
     assert match["relative_area_error"] == 0.1
     assert match["boundary_hausdorff_m"] == 2
     assert "densify=0.25" in report["metric_definitions"]["boundary_hausdorff_m"]
+
+
+def test_fingerprint_value_is_stable_for_existing_reports():
+    # Reports already on disk carry this value; comparisons break if it drifts.
+    holes = Polygon(box(20, 0, 30, 10).exterior.coords, [box(22, 2, 24, 4).exterior.coords])
+    assert geometry_fingerprint(frame([box(0, 0, 10, 10), holes])) == "9d0e81faec438fa143ce5913a23f72eb54443e0a9698562100cedea3a98c6406"
+
+
+def test_report_records_evaluated_reference_rows_and_their_order():
+    reference = frame([box(0, 0, 10, 10), box(200, 200, 210, 210), box(20, 0, 30, 10)])
+    report = evaluate(frame([box(20, 0, 30, 10)]), reference, aoi(), crs=CRS).report
+    assert report["evaluated_reference_ids"] == [0, 2]  # Row 1 lies outside the AOI.
+    assert report["matches"][0]["reference_id"] == 2
+    reordered = evaluate(frame([box(20, 0, 30, 10)]), reference.iloc[::-1], aoi(), crs=CRS).report
+    assert reordered["reference_fingerprint"] == report["reference_fingerprint"]
+    assert reordered["reference_order_fingerprint"] != report["reference_order_fingerprint"]
+
+
+def test_predictions_fingerprint_identifies_the_prediction_set():
+    reference = frame([box(0, 0, 10, 10)])
+    first = evaluate(frame([box(0, 0, 10, 10)]), reference, aoi(), crs=CRS).report
+    second = evaluate(frame([box(1, 0, 11, 10)]), reference, aoi(), crs=CRS).report
+    assert first["predictions_fingerprint"] != second["predictions_fingerprint"]
+    assert first["reference_fingerprint"] == second["reference_fingerprint"]
 
 
 @pytest.mark.parametrize("predicted,actual,precision,recall,f1,fp,fn", [
@@ -121,6 +145,8 @@ def test_cli_writes_json_and_all_six_layers_without_altering_inputs(tmp_path):
     main(argv)
     report = json.loads(output_json.read_text())
     assert report["f1"] == 1
+    assert report["predictions_fingerprint"] == geometry_fingerprint(source["predictions"])
+    assert report["sources"]["predictions"] == {"path": str((tmp_path / "predictions.gpkg").resolve()), "layer": None}
     assert len(gpd.list_layers(output_gpkg)) == 6
     assert gpd.read_file(output_gpkg, layer="matched_predictions").instance_id.tolist() == ["synthetic-1"]
     assert {role: (tmp_path / f"{role}.gpkg").read_bytes() for role in source} == before

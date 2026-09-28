@@ -2,6 +2,37 @@ import os
 import subprocess
 import sys
 
+from pyproj.exceptions import CRSError
+
+from nearmap_buildings.cli import is_user_error
+
+def run_nbf(*args, **env):
+    # Never inherit a developer's NBF_DEBUG; tests set it explicitly.
+    base = {key: value for key, value in os.environ.items() if key != "NBF_DEBUG"}
+    return subprocess.run([sys.executable,"-m","nearmap_buildings.cli",*args],capture_output=True,text=True,env={**base,**env})
+
+def test_user_errors_print_one_line_instead_of_a_traceback(tmp_path):
+    result = run_nbf("infer","--manifest",str(tmp_path/"manifest.json"),"--output",str(tmp_path/"out"),"--confidence","2")
+    assert result.returncode == 2
+    assert "nbf infer: error: Invalid confidence" in result.stderr
+    assert "Traceback" not in result.stderr
+
+def test_unreadable_raster_is_a_user_error(tmp_path):
+    result = run_nbf("tile",str(tmp_path/"missing.tif"),"--output",str(tmp_path/"tiles"))
+    assert result.returncode == 2
+    assert result.stderr.startswith("nbf tile: error:")
+    assert "Traceback" not in result.stderr
+    assert not (tmp_path/"tiles").exists()
+
+def test_debug_environment_restores_the_traceback(tmp_path):
+    result = run_nbf("infer","--manifest",str(tmp_path/"manifest.json"),"--output",str(tmp_path/"out"),"--confidence","2",NBF_DEBUG="1")
+    assert result.returncode == 1
+    assert "Traceback" in result.stderr and "ValueError" in result.stderr
+
+def test_only_input_and_gis_errors_count_as_user_errors():
+    assert is_user_error(ValueError()) and is_user_error(FileNotFoundError()) and is_user_error(CRSError("unknown CRS"))
+    assert not is_user_error(KeyError("tiles")) and not is_user_error(TypeError())
+
 def test_subcommand_help_describes_actual_options():
     result = subprocess.run([sys.executable,"-m","nearmap_buildings.cli","infer","--help"],capture_output=True,text=True)
     assert result.returncode == 0

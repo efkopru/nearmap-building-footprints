@@ -19,13 +19,20 @@ def validate_raster(src, bands):
     if src.transform.b != 0 or src.transform.d != 0 or src.transform.a <= 0 or src.transform.e >= 0:
         raise ValueError("Use north-up imagery with positive x and negative y pixel size. Warp rotated imagery first.")
 
+def _window_starts(size, tile_size, step):
+    if size <= tile_size:
+        return [0]
+    # The last window sits flush with the raster edge instead of leaving a thin
+    # sliver, so it may overlap its neighbor by more than the requested overlap.
+    return [*range(0, size - tile_size, step), size - tile_size]
+
 def windows(width, height, tile_size, overlap):
+    """Full-size windows overlapping by at least `overlap` pixels; smaller only if the raster is."""
     if tile_size <= 0 or not 0 <= overlap < tile_size:
         raise ValueError("Require tile_size > 0 and 0 <= overlap < tile_size.")
     step = tile_size - overlap
-    # Stop when the last window reaches the edge; avoid a redundant sliver tile.
-    rows = [0] if height <= tile_size else list(range(0, height - overlap, step))
-    cols = [0] if width <= tile_size else list(range(0, width - overlap, step))
+    rows = _window_starts(height, tile_size, step)
+    cols = _window_starts(width, tile_size, step)
     for row in rows:
         for col in cols:
             yield Window(col, row, min(tile_size, width - col), min(tile_size, height - row))
@@ -84,8 +91,8 @@ def tile_main(argv=None):
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("source", type=Path)
     p.add_argument("--output", type=Path, required=True)
-    p.add_argument("--tile-size", type=int, default=1024)
-    p.add_argument("--overlap", type=int, default=128)
+    p.add_argument("--tile-size", type=int, default=1024, help="Tile width and height in pixels.")
+    p.add_argument("--overlap", type=int, default=128, help="Minimum overlap between neighboring tiles, in pixels.")
     p.add_argument("--bands", nargs=3, type=int, default=[1, 2, 3])
     p.add_argument("--min-valid-fraction", type=float, default=0.01)
     p.add_argument("--hash-source", action="store_true", help="Hash the full source file; a VRT hash does not hash its source rasters.")

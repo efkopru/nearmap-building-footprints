@@ -11,6 +11,9 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import warnings
+
+from .common import read_json, sha256_file
 
 
 SPLITS = ("train", "val", "test")
@@ -80,14 +83,6 @@ def validate_splits(frame, field="split", min_distance_m=0):
     return areas
 
 
-def _sha256(path):
-    digest = hashlib.sha256()
-    with Path(path).open("rb") as source:
-        for chunk in iter(lambda: source.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
 def prepare_coco(manifest_path, ground_truth, split_aois, output, *, split_field="split",
                  ground_truth_layer=None, split_layer=None, bands=(1, 2, 3),
                  min_split_distance_m=0, skip_unassigned=False, labels_complete=False):
@@ -101,6 +96,7 @@ def prepare_coco(manifest_path, ground_truth, split_aois, output, *, split_field
     import numpy as np
     from pyproj import CRS
     import rasterio
+    from rasterio.errors import NotGeoreferencedWarning
     from rasterio.features import rasterize
     from shapely.geometry import Polygon
 
@@ -111,7 +107,7 @@ def prepare_coco(manifest_path, ground_truth, split_aois, output, *, split_field
         raise FileExistsError(f"Use a new output directory: {output}")
     if len(bands) != 3 or len(set(bands)) != 3 or any(b < 1 for b in bands):
         raise ValueError("bands must be three distinct positive band numbers in RGB order")
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest = read_json(manifest_path)
     tiles = manifest.get("tiles")
     if not isinstance(tiles, list) or not tiles:
         raise ValueError("Manifest must contain a nonempty tiles array")
@@ -163,7 +159,7 @@ def prepare_coco(manifest_path, ground_truth, split_aois, output, *, split_field
                 raise ValueError(f"Tile {tile_id}: choose three existing uint8 RGB bands; no implicit stretch")
             if not (source.dataset_mask() > 0).all():
                 raise ValueError(f"Tile {tile_id}: nodata pixels present; select fully valid imagery for exhaustive training labels")
-            footprint = Polygon([transform * point for point in
+            footprint = Polygon([transform @ point for point in
                                  [(0, 0), (source.width, 0), (source.width, source.height), (0, source.height)]])
             split_footprint = gpd.GeoSeries([footprint], crs=source.crs).to_crs(splits.crs).iloc[0]
             owners = [name for name, area in areas.items() if area.covers(split_footprint)]
@@ -231,15 +227,19 @@ def prepare_coco(manifest_path, ground_truth, split_aois, output, *, split_field
         with rasterio.open(path) as source:
             rgb = source.read(list(bands))
         h, w = instances.shape
-        with rasterio.open(output / split_name / "images" / f"{name}.png", "w", driver="PNG",
-                           width=w, height=h, count=3, dtype="uint8") as target:
-            target.write(rgb)
+        with warnings.catch_warnings():
+            # Training PNGs are deliberately in image-pixel coordinates; the instance
+            # GeoTIFF written beside each one keeps the georeferencing.
+            warnings.simplefilter("ignore", NotGeoreferencedWarning)
+            with rasterio.open(output / split_name / "images" / f"{name}.png", "w", driver="PNG",
+                               width=w, height=h, count=3, dtype="uint8") as target:
+                target.write(rgb)
         with rasterio.open(output / split_name / "instances" / f"{name}.tif", "w", driver="GTiff",
                            width=w, height=h, count=1, dtype="uint32", crs=crs,
                            transform=transform, nodata=0, compress="deflate") as target:
             target.write(instances, 1)
     report = {"schema": "building-coco-spatial-v1", "labels_complete_confirmed": True,
-              "manifest_sha256": _sha256(manifest_path), "split_field": split_field,
+              "manifest_sha256": sha256_file(manifest_path), "split_field": split_field,
               "ground_truth_geometry_sha256": hashlib.sha256(b"".join(truth.geometry.to_wkb())).hexdigest(),
               "split_geometry_sha256": hashlib.sha256(b"".join(splits.geometry.to_wkb())
                   + json.dumps(splits[split_field].tolist()).encode()).hexdigest(),
@@ -267,7 +267,7 @@ def launch_sam3(checkout, config, *, python=sys.executable, num_gpus=1, execute=
     command = [str(python), str(entry), "-c", config.relative_to(config_root).as_posix(),
                "--use-cluster", "0", "--num-gpus", str(num_gpus), "--num-nodes", "1"]
     plan = {"cwd": str(checkout), "command": command, "execute": execute,
-            "config_sha256": _sha256(config)}
+            "config_sha256": sha256_file(config)}
     if execute:
         environment = os.environ.copy()
         environment["PYTHONPATH"] = str(checkout) + os.pathsep + environment.get("PYTHONPATH", "")
@@ -332,14 +332,14 @@ def export_checkpoint(source, output):
     metadata = {"schema": CHECKPOINT_SCHEMA, "format": "sam3-detector-prefixed",
                 "model_id": "facebook/sam3", "upstream_commit": SAM3_COMMIT,
                 "supported_methods": ["text", "exemplar"], "tensor_count": len(state),
-                "source_checkpoint_sha256": _sha256(source),
+                "source_checkpoint_sha256": sha256_file(source),
                 "exported_utc": datetime.now(timezone.utc).isoformat(),
                 "validation": "native tensor components and finite values; model shapes not instantiated"}
     output.parent.mkdir(parents=True, exist_ok=True)
     # Exclusive creation prevents accidentally replacing the training checkpoint.
     with output.open("xb") as target:
         torch.save({"model": state, "metadata": metadata}, target)
-    metadata = dict(metadata, checkpoint_sha256=_sha256(output))
+    metadata = dict(metadata, checkpoint_sha256=sha256_file(output))
     with metadata_path.open("x", encoding="utf-8") as target:
         json.dump(metadata, target, indent=2)
     return {"checkpoint": str(output), "metadata": str(metadata_path), **metadata}

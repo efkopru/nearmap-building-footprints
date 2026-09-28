@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+import re
 import subprocess
 import sys
 from types import SimpleNamespace
@@ -12,9 +13,11 @@ from rasterio.transform import from_origin
 from shapely.geometry import Polygon, box
 
 from nearmap_buildings.esri import run_esri
-from nearmap_buildings.import_vectors import import_vectors
-from nearmap_buildings.training import (detector_state_from_trainer, encode_rle, export_checkpoint,
-                                      launch_sam3, prepare_coco, validate_splits)
+from nearmap_buildings.import_vectors import import_vectors, main as import_vectors_main
+from nearmap_buildings.training import (SAM3_COMMIT, detector_state_from_trainer, encode_rle,
+                                      export_checkpoint, launch_sam3, prepare_coco, validate_splits)
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def decode_rle(rle):
@@ -65,6 +68,8 @@ def test_rle_preserves_column_order_and_integer_runs(mask):
     np.testing.assert_array_equal(decode_rle(encoded), mask)
 
 
+# Reading back a training PNG is expected to warn: PNGs are in image-pixel coordinates.
+@pytest.mark.filterwarnings("ignore::rasterio.errors.NotGeoreferencedWarning")
 def test_holes_touching_instances_and_negative_test_tile(tmp_path):
     inputs = make_data(tmp_path / "source")
     output = tmp_path / "prepared"
@@ -215,6 +220,21 @@ def test_vector_import_reprojects_and_preserves_instances(tmp_path):
     np.testing.assert_allclose(result["score"], [0.8, 0.9])
     with pytest.raises(FileExistsError):
         import_vectors(source, output, 26914)
+
+
+def test_vector_import_cli_prints_json(tmp_path, capsys):
+    source = tmp_path / "export.gpkg"
+    gpd.GeoDataFrame(geometry=[box(0, 0, 10, 10)], crs=26914).to_file(source)
+    import_vectors_main(["--input", str(source), "--output", str(tmp_path / "out.gpkg"), "--crs", "EPSG:26914"])
+    assert json.loads(capsys.readouterr().out)["features"] == 1
+
+
+@pytest.mark.parametrize("relative", ["scripts/setup_sam3.sh", "configs/sam3_training.example.yaml",
+                                      "docs/USAGE.md", "docs/OPTIONAL_METHODS.md", "docs/SOURCES.md",
+                                      "docs/VALIDATION.md"])
+def test_pinned_sam3_commit_matches_everywhere_it_is_written(relative):
+    commits = set(re.findall(r"\b[0-9a-f]{40}\b", (ROOT / relative).read_text(encoding="utf-8")))
+    assert commits == {SAM3_COMMIT}
 
 
 def test_esri_dry_run_does_not_require_arcpy(tmp_path):

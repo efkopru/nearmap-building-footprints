@@ -10,18 +10,37 @@ permissions:
   contents: read
 
 jobs:
-  cpu:
-    name: Python 3.12 / ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-24.04, windows-2025]
+  lint:
+    name: Lint
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.12'
+      - name: Check correctness rules
+        run: |
+          python -m pip install ruff==0.16.9
+          ruff check --output-format=github .
+
+  cpu:
+    name: Python ${{ matrix.python-version }} / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025]
+        python-version: ['3.12', '3.13']
+    defaults:
+      run:
+        # Fail on the first failing command on every OS. Windows' default shell,
+        # PowerShell, only reports the exit code of a step's last command.
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python-version }}
           cache: pip
           cache-dependency-path: requirements-cpu.lock
       - name: Install CPU dependencies
@@ -29,7 +48,12 @@ jobs:
           python -m pip install -r requirements-cpu.lock
           python -m pip install --no-deps -e .
       - name: Test CPU workflow and adapters
-        run: python -m pytest -q
+        run: python -m coverage run -m pytest -q
+      - name: Report coverage
+        run: |
+          python -m coverage combine
+          python -m coverage report
+          python -m coverage report --format=markdown >> "$GITHUB_STEP_SUMMARY"
       - name: Exercise synthetic CLI pipeline
         run: |
           nbf doctor
@@ -39,4 +63,10 @@ jobs:
           nbf infer --manifest data/ci_tiles/manifest.json --method text --output outputs/ci_plan
           nbf clean --input data/ci_demo/perfect_predictions.gpkg --output outputs/ci_cleaned.gpkg --metric-crs EPSG:32614
           nbf evaluate --predictions outputs/ci_cleaned.gpkg --predictions-layer cleaned --reference data/ci_demo/reference.gpkg --aoi data/ci_demo/aoi.geojson --metric-crs EPSG:32614 --output-json outputs/ci_metrics.json --output-gpkg outputs/ci_matches.gpkg --independent-holdout
+          nbf import-vectors --input data/ci_demo/reference.gpkg --output outputs/ci_imported.gpkg --crs EPSG:32614 --id-field building_id
+          nbf evaluate --predictions outputs/ci_imported.gpkg --reference data/ci_demo/reference.gpkg --aoi data/ci_demo/aoi.geojson --metric-crs EPSG:32614 --output-json outputs/ci_imported_metrics.json --independent-holdout
+          nbf import-vectors --input data/ci_demo/esri_format_predictions.gdb --layer esri_buildings --preset esri --crs EPSG:32614 --output outputs/ci_esri/raw.gpkg
+          nbf clean --input outputs/ci_esri/raw.gpkg --output outputs/ci_esri/cleaned.gpkg --metric-crs EPSG:32614
+          nbf evaluate --predictions outputs/ci_esri/cleaned.gpkg --predictions-layer cleaned --reference data/ci_demo/reference.gpkg --aoi data/ci_demo/aoi.geojson --metric-crs EPSG:32614 --output-json outputs/ci_esri/evaluation.json --independent-holdout
+          nbf compare --reports outputs/ci_metrics.json outputs/ci_imported_metrics.json outputs/ci_esri/evaluation.json --labels cleaned imported esri --output outputs/ci_comparison.csv --per-building outputs/ci_per_building.gpkg
           nbf train prepare-coco --manifest data/ci_tiles/manifest.json --ground-truth data/ci_demo/reference.gpkg --split-aois data/ci_demo/splits.geojson --output data/ci_training --labels-complete --skip-unassigned

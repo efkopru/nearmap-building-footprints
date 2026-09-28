@@ -6,7 +6,7 @@ import geopandas as gpd
 import pytest
 from shapely.geometry import MultiPolygon, Polygon, box
 
-from nearmap_buildings.compare import compare_reports, main
+from nearmap_buildings.compare import _outcome, compare_reports, main, per_building
 from nearmap_buildings.evaluation import evaluate, geometry_fingerprint
 
 
@@ -67,6 +67,22 @@ def test_comparison_preserves_separate_metrics_for_same_holdout(tmp_path):
     assert rows[1]["matched_iou_mean"] is None
 
 
+def test_rows_identify_predictions_and_older_reports_remain_comparable(tmp_path):
+    current = report()
+    older = report(frame([]))
+    del older["predictions_fingerprint"]
+    rows = compare_reports([save(tmp_path, "text", current), save(tmp_path, "box", older)])
+    assert rows[0]["predictions_fingerprint"] == current["predictions_fingerprint"]
+    assert rows[1]["predictions_fingerprint"] is None
+
+
+def test_rejects_malformed_predictions_fingerprint(tmp_path):
+    value = report()
+    value["predictions_fingerprint"] = "not-a-hash"
+    with pytest.raises(ValueError, match="predictions_fingerprint"):
+        compare_reports([save(tmp_path, "bad", value)])
+
+
 @pytest.mark.parametrize("field,new_value", [
     ("reference_fingerprint", "a" * 64), ("aoi_fingerprint", "b" * 64),
     ("metric_crs", "EPSG:32614"), ("iou_threshold", 0.75), ("edge_policy", "clip"),
@@ -115,6 +131,73 @@ def test_failed_comparison_does_not_create_csv(tmp_path):
     with pytest.raises(ValueError, match="iou_threshold"):
         main(["--reports", str(first), str(second), "--output", str(output)])
     assert not output.exists()
+
+
+def two_method_reports(tmp_path):
+    """Esri finds buildings a and b; SAM 3 finds only b; nobody finds c."""
+    reference = frame([box(0, 0, 10, 10), box(20, 0, 30, 10), box(40, 0, 50, 10)], building_id=["a", "b", "c"])
+    reference_path = tmp_path / "reference.gpkg"
+    reference.to_file(reference_path, driver="GPKG")
+    aoi = frame([box(-10, -10, 100, 100)])
+    esri = evaluate(frame([box(0, 0, 10, 10), box(20, 0, 30, 10)]), reference, aoi, crs=CRS).report
+    sam = evaluate(frame([box(20.5, 0, 30, 10)]), reference, aoi, crs=CRS).report
+    return [save(tmp_path, "esri", esri), save(tmp_path, "sam3", sam)], reference, reference_path
+
+
+def test_per_building_shows_which_methods_found_each_building(tmp_path):
+    paths, _, reference_path = two_method_reports(tmp_path)
+    buildings = per_building(paths, ["Esri", "SAM 3 text"], reference=reference_path)
+    assert buildings.building_id.tolist() == ["a", "b", "c"]
+    assert buildings.outcome.tolist() == ["only Esri", "found by both", "missed by both"]
+    assert buildings.found_by.tolist() == ["Esri", "Esri;SAM 3 text", ""]
+    assert buildings.esri_match_id.tolist() == [0, 1, -1]
+    assert buildings.sam_3_text_match_iou.iloc[1] == pytest.approx(0.95)
+
+
+def test_per_building_refuses_a_reordered_reference(tmp_path):
+    paths, reference, _ = two_method_reports(tmp_path)
+    reordered = tmp_path / "reordered.gpkg"
+    reference.iloc[::-1].to_file(reordered, driver="GPKG")
+    with pytest.raises(ValueError, match="row order"):
+        per_building(paths, ["esri", "sam3"], reference=reordered)
+
+
+def test_per_building_needs_reports_with_reference_row_ids(tmp_path):
+    paths, _, reference_path = two_method_reports(tmp_path)
+    old = json.loads(paths[1].read_text())
+    del old["evaluated_reference_ids"]
+    paths[1].write_text(json.dumps(old))
+    with pytest.raises(ValueError, match="re-run nbf evaluate"):
+        per_building(paths, ["esri", "sam3"], reference=reference_path)
+
+
+def test_per_building_labels_must_give_distinct_field_names(tmp_path):
+    paths, _, reference_path = two_method_reports(tmp_path)
+    with pytest.raises(ValueError, match="distinct field names"):
+        per_building(paths, ["SAM 3", "sam-3"], reference=reference_path)
+
+
+def test_outcome_names_for_three_methods():
+    labels = ["esri", "sam3_text", "nearmap"]
+    assert _outcome(["esri", "sam3_text", "nearmap"], labels) == "found by all"
+    assert _outcome(["esri", "nearmap"], labels) == "found by 2 of 3"
+    assert _outcome([], labels) == "missed by all"
+    assert _outcome(["nearmap"], labels) == "only nearmap"
+
+
+def test_cli_writes_per_building_layer_and_refuses_to_replace_it(tmp_path, capsys):
+    paths, _, reference_path = two_method_reports(tmp_path)
+    layer = tmp_path / "per_building.gpkg"
+    args = ["--reports", *map(str, paths), "--labels", "esri", "sam3", "--output", str(tmp_path / "comparison.csv"),
+            "--per-building", str(layer), "--reference", str(reference_path)]
+    main(args)
+    assert json.loads(capsys.readouterr().out)["outcomes"] == {"only esri": 1, "found by both": 1, "missed by both": 1}
+    assert gpd.read_file(layer, layer="buildings").outcome.tolist() == ["only esri", "found by both", "missed by both"]
+    again = ["--reports", *map(str, paths), "--labels", "esri", "sam3", "--output", str(tmp_path / "second.csv"),
+             "--per-building", str(layer), "--reference", str(reference_path)]
+    with pytest.raises(SystemExit):
+        main(again)
+    assert not (tmp_path / "second.csv").exists()
 
 
 def test_labels_must_match_reports_and_be_unique(tmp_path):

@@ -3,6 +3,10 @@
 third_party/
 __pycache__/
 .pytest_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
 *.egg-info/
 build/
 dist/

@@ -6,6 +6,9 @@ import platform
 from datetime import datetime, timezone
 from pathlib import Path
 
+# Written by evaluation and checked by comparison; one definition keeps them in step.
+FINGERPRINT_METHOD = "sha256-normalized-wkb-source-crs-v1"
+
 def read_json(path):
     return json.loads(Path(path).read_text(encoding="utf-8-sig"))
 
