@@ -8,7 +8,7 @@
 
 `nbf` is a Python command-line tool. It tiles GeoTIFF or VRT mosaics, runs four SAM 3 prompting modes alongside an Esri Mask R-CNN baseline and imported vendor vectors, suppresses duplicate polygons from overlapping tiles, and scores each method with one-to-one matching. Every stage records hashes and receipts, so an output polygon can be traced back to the pixels, prompts, and model weights that produced it.
 
-> **Status:** The CPU pipeline is implemented and covered by 146 automated tests, run in CI on Windows and Ubuntu with Python 3.12 and 3.13. The Esri integration has run in ArcGIS Pro on real aerial imagery. The SAM 3 and fine-tuning integrations target pinned upstream versions but have not yet run on a GPU. No accuracy results are claimed yet, and the figures are synthetic illustrations. [Details](#project-status)
+> **Status:** The CPU pipeline is implemented and covered by 146 automated tests, run in CI on Windows and Ubuntu with Python 3.12 and 3.13. SAM 3 and Esri have both run on real aerial imagery, and a [first untuned comparison on one sample area](https://github.com/efkopru/nearmap-building-footprints/blob/main/results/lewisville_old_town/README.md) is published. It is scored against an older building inventory, so it measures agreement, not accuracy. Fine-tuning has not been run, and the figures are synthetic illustrations. [Details](#project-status)
 
 ![Workflow from local georeferenced imagery through tiling, SAM 3 and baseline extraction, polygon cleanup, and held-out evaluation, with an optional fine-tuning route](https://raw.githubusercontent.com/efkopru/nearmap-building-footprints/main/docs/images/workflow.png)
 
@@ -159,15 +159,16 @@ The [usage guide](https://github.com/efkopru/nearmap-building-footprints/blob/ma
 - All four SAM 3 adapter modes run against a fake model, exercising prompt handling, georeferencing, and output plumbing. Checkpoint export is tested against a mocked Torch interface.
 - The adapter was checked against the SamGeo 1.4.2 source, and the training recipe against Meta's pinned SAM 3 commit.
 - `esri.py` ran Esri's model in ArcGIS Pro on a GPU over real aerial imagery, and its output passed through import and cleanup. That first real run exposed a validation bug, now fixed and tested.
+- SAM 3 ran on a 6 GB laptop GPU (RTX 4050) at about 0.8 s per 1024 px tile, with peak memory of 5.8 GB. The [first untuned comparison](https://github.com/efkopru/nearmap-building-footprints/blob/main/results/lewisville_old_town/README.md) of SAM 3 and Esri covers one 0.49 km² sample area.
 
 **Not yet run**
 
-- SAM 3 on a GPU, fine-tuning, and a scored comparison on real imagery.
-- As a result, there are **no accuracy results** yet. Synthetic fixtures verify data handling and metric calculations, and their perfect scores are expected by construction.
+- Fine-tuning, and a comparison against reference outlines reviewed for the imagery date.
+- As a result, there are **no accuracy results** yet: the published real-imagery scores are agreement with an older inventory. Synthetic fixtures verify data handling and metric calculations, and their perfect scores are expected by construction.
 
 **Next steps**
 
-1. Label a pilot area and a spatially separate test area, then run SAM 3 text inference on a GPU.
+1. Review reference outlines against the imagery for a validation area and a spatially separate test area.
 2. Tune prompts, thresholds, and cleanup on validation data only, then freeze them.
 3. Evaluate every method on the held-out test area and publish aggregate results in the [comparison report format](https://github.com/efkopru/nearmap-building-footprints/blob/main/docs/METHODOLOGY.md#comparison-report-template).
 
