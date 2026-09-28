@@ -1,3 +1,4 @@
+import contextlib
 import json
 from pathlib import Path
 import re
@@ -247,6 +248,39 @@ def test_esri_dry_run_does_not_require_arcpy(tmp_path):
     assert "return_bboxes False" in plan["arguments"]
     with pytest.raises(ValueError, match="perfect square"):
         run_esri(image, model, tmp_path / "footprints.shp", batch_size=3)
+
+
+def fake_arcpy(calls, pixel_type="U8"):
+    """Just enough of ArcPy for run_esri's execute path; records the detection call."""
+    def detect(**kwargs):
+        calls["detect"] = kwargs
+    return SimpleNamespace(
+        Exists=lambda path: path.endswith(".gdb"),
+        Raster=lambda path: SimpleNamespace(bandCount=3, pixelType=pixel_type,
+                                            spatialReference=SimpleNamespace(name="NAD_1983_UTM_Zone_14N")),
+        CheckExtension=lambda name: "Available", CheckOutExtension=lambda name: None,
+        CheckInExtension=lambda name: calls.setdefault("checked_in", True),
+        EnvManager=lambda **kwargs: contextlib.nullcontext(),
+        Describe=lambda path: SimpleNamespace(shapeType="Polygon"),
+        ia=SimpleNamespace(DetectObjectsUsingDeepLearning=detect),
+        management=SimpleNamespace(AddField=lambda *a, **k: None,
+                                   CalculateField=lambda *a, **k: calls.setdefault("method", a[2])))
+
+
+def test_esri_execute_validates_the_raster_as_a_whole_and_runs_detection(tmp_path, monkeypatch):
+    image, model = tmp_path / "image.tif", tmp_path / "usa.dlpk"
+    image.touch()
+    model.touch()
+    output = str(tmp_path / "results.gdb" / "buildings")
+    calls = {}
+    monkeypatch.setitem(sys.modules, "arcpy", fake_arcpy(calls))
+    run_esri(image, model, output, execute=True)
+    assert calls["detect"]["run_nms"] == "NO_NMS"
+    assert "return_bboxes False" in calls["detect"]["arguments"]
+    assert calls["method"] == "'esri_building_usa'" and calls["checked_in"]
+    monkeypatch.setitem(sys.modules, "arcpy", fake_arcpy({}, pixel_type="F32"))
+    with pytest.raises(ValueError, match="unsigned 8-bit"):
+        run_esri(image, model, output, execute=True)
 
 
 def native_state(factory=lambda: np.array([1.0])):

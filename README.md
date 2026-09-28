@@ -8,7 +8,7 @@
 
 `nbf` is a Python command-line tool. It tiles GeoTIFF or VRT mosaics, runs four SAM 3 prompting modes alongside an Esri Mask R-CNN baseline and imported vendor vectors, suppresses duplicate polygons from overlapping tiles, and scores each method with one-to-one matching. Every stage records hashes and receipts, so an output polygon can be traced back to the pixels, prompts, and model weights that produced it.
 
-> **Status:** The CPU pipeline is implemented and covered by 140 automated tests, run in CI on Windows and Ubuntu with Python 3.12 and 3.13. The SAM 3, fine-tuning, and ArcGIS integrations target pinned upstream versions but have not yet been run on real imagery or a GPU, so no accuracy results are claimed. The figures are synthetic illustrations. [Details](#project-status)
+> **Status:** The CPU pipeline is implemented and covered by 146 automated tests, run in CI on Windows and Ubuntu with Python 3.12 and 3.13. The Esri integration has run in ArcGIS Pro on real aerial imagery. The SAM 3 and fine-tuning integrations target pinned upstream versions but have not yet run on a GPU. No accuracy results are claimed yet, and the figures are synthetic illustrations. [Details](#project-status)
 
 ![Workflow from local georeferenced imagery through tiling, SAM 3 and baseline extraction, polygon cleanup, and held-out evaluation, with an optional fine-tuning route](https://raw.githubusercontent.com/efkopru/nearmap-building-footprints/main/docs/images/workflow.png)
 
@@ -158,10 +158,11 @@ The [usage guide](https://github.com/efkopru/nearmap-building-footprints/blob/ma
 - Every push runs lint, the test suite with coverage, and a synthetic end-to-end run of every CPU pipeline stage (demo data, tiling, inference plan, cleanup, evaluation, vector and Esri-format import, per-building comparison, and COCO preparation), on Windows and Ubuntu with Python 3.12 and 3.13.
 - All four SAM 3 adapter modes run against a fake model, exercising prompt handling, georeferencing, and output plumbing. Checkpoint export is tested against a mocked Torch interface.
 - The adapter was checked against the SamGeo 1.4.2 source, and the training recipe against Meta's pinned SAM 3 commit.
+- `esri.py` ran Esri's model in ArcGIS Pro on a GPU over real aerial imagery, and its output passed through import and cleanup. That first real run exposed a validation bug, now fixed and tested.
 
 **Not yet run**
 
-- Real Nearmap imagery, SAM 3 weights, GPU inference, fine-tuning, and ArcGIS inference.
+- SAM 3 on a GPU, fine-tuning, and a scored comparison on real imagery.
 - As a result, there are **no accuracy results** yet. Synthetic fixtures verify data handling and metric calculations, and their perfect scores are expected by construction.
 
 **Next steps**

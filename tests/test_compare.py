@@ -76,6 +76,21 @@ def test_rows_identify_predictions_and_older_reports_remain_comparable(tmp_path)
     assert rows[1]["predictions_fingerprint"] is None
 
 
+def test_agreement_only_and_holdout_reports_are_never_mixed(tmp_path):
+    holdout = report()
+    agreement = deepcopy(holdout)
+    agreement["reference_status"] = "agreement_only"
+    with pytest.raises(ValueError, match="reference_status"):
+        compare_reports([save(tmp_path, "one", holdout), save(tmp_path, "two", agreement)])
+
+
+def test_older_reports_count_as_holdouts_and_the_status_is_in_the_csv(tmp_path):
+    older = report()
+    del older["reference_status"]
+    rows = compare_reports([save(tmp_path, "old", older), save(tmp_path, "new", report())])
+    assert [row["reference_status"] for row in rows] == ["independent_holdout", "independent_holdout"]
+
+
 def test_rejects_malformed_predictions_fingerprint(tmp_path):
     value = report()
     value["predictions_fingerprint"] = "not-a-hash"

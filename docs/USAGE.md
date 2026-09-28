@@ -155,6 +155,8 @@ nbf compare --reports outputs/text_pilot01/evaluation.json outputs/esri_pilot01/
 
 The comparator checks holdout geometry fingerprints and evaluation settings before writing the table. It cannot establish label independence or matching capture dates; record those decisions in the experiment metadata.
 
+When the only reference available is an existing inventory that may be outdated, such as building outlines collected years before the imagery, pass `--agreement-only` instead of `--independent-holdout`. The report then records `reference_status: agreement_only`: precision, recall and F1 measure agreement with that inventory, not accuracy, because an unmatched prediction may be a real building the inventory lacks. `nbf compare` never mixes agreement-only reports with independent-holdout reports, and shows the status in its CSV.
+
 ### Compare Esri with other models
 
 Run Esri's model in ArcGIS Pro as described in [OPTIONAL_METHODS.md](OPTIONAL_METHODS.md#esri-building-footprint-extraction-usa-baseline), then give its output the same treatment as SAM 3's:
