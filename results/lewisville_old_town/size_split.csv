@@ -1,0 +1,10 @@
+method,size,reference,recall,predictions,precision
+sam3_text,all,319,0.445,429,0.331
+sam3_text,>=50 m2,208,0.63,331,0.39
+sam3_text,<50 m2,111,0.099,98,0.133
+esri_city,all,319,0.423,198,0.682
+esri_city,>=50 m2,208,0.644,193,0.694
+esri_city,<50 m2,111,0.009,5,0.2
+esri_local,all,319,0.495,539,0.293
+esri_local,>=50 m2,208,0.707,396,0.364
+esri_local,<50 m2,111,0.099,143,0.098

@@ -10,6 +10,11 @@ if [[ -n "$training" && "$training" != "--training" ]]; then
   printf '%s\n' 'Usage: bash scripts/setup_sam3.sh [--training]' >&2
   exit 2
 fi
+# Stock Ubuntu ships python3.12 without ensurepip, which venv needs to install pip.
+if ! python3.12 -c 'import ensurepip' 2>/dev/null; then
+  printf '%s\n' 'Python 3.12 venv support is missing. Install it first: sudo apt install python3.12-venv' >&2
+  exit 1
+fi
 python3.12 -m venv .venv-sam3
 source .venv-sam3/bin/activate
 python -m pip install pip==26.2.1
