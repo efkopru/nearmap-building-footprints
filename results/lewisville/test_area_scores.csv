@@ -1,0 +1,4 @@
+method,tp,fp,fn,precision,recall,f1,median_iou,shed_recall,sheds,f1_all_sizes,reference_main
+"Esri, city run",445,16,26,0.9653,0.9448,0.9549,0.7586,0.0,136,0.8333,471
+SAM 3,430,92,41,0.8238,0.913,0.8661,0.755,0.0147,136,0.7606,471
+"Esri, local raw run",422,30,49,0.9336,0.896,0.9144,0.7917,0.0147,136,0.7974,471
