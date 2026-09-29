@@ -27,4 +27,4 @@ The demo image is nine flat roofs on a flat background, with exact reference out
 - **SAM 3 finds nothing for the prompt "building":** the flat rectangles don't look like buildings. For "rectangle" it finds some of them, and the rest of notebook 2 cleans and scores that run.
 - **Esri's model finds all nine roofs, but at confidence 0.5 to 0.7:** that is below the 0.9 cut-off frozen for Lewisville, so notebook 3 keeps the run's own 0.5 threshold.
 
-The real results, including screenshots of both models on Lewisville's imagery, are summarized in [results/lewisville](../results/lewisville/README.md). The screenshots themselves stay in a private report because the imagery is licensed.
+The real results are in [results/lewisville](../results/lewisville/README.md), and screenshots of both models on Lewisville's imagery are in its [PDF report](../results/lewisville/Lewisville_building_footprint_comparison.pdf).

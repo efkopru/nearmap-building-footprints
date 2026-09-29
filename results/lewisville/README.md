@@ -1,6 +1,6 @@
 # Lewisville, Texas: final results
 
-This page compares SAM 3 and Esri's building model on Nearmap's May 2026 imagery of Lewisville (10.16 cm), across the whole city, on an Old Town sample and in a separate test area, with each model's settings frozen by a fixed rule. **Every score here measures agreement with the city's building outlines collected in 2015 or earlier, not accuracy.** Outlines for an accuracy check were prepared for two sample areas but not reviewed. Screenshots of the results stay in a private report because the imagery is licensed; this page has aggregate numbers and imagery-free charts only.
+This page compares SAM 3 and Esri's building model on Nearmap's May 2026 imagery of Lewisville (10.16 cm), across the whole city, on an Old Town sample and in a separate test area, with each model's settings frozen by a fixed rule. **Every score here measures agreement with the city's building outlines collected in 2015 or earlier, not accuracy.** Outlines for an accuracy check were prepared for two sample areas but not reviewed. The full report, with eight screenshots of both models on the imagery, is the [PDF](Lewisville_building_footprint_comparison.pdf) (imagery: Nearmap, May 2026); this page has the numbers and imagery-free charts.
 
 ## Key findings
 
@@ -40,7 +40,7 @@ Of the 38,882 2015 outlines, both models found 24,585, Esri alone 1,917, SAM 3 a
 
 **SAM 3 against Esri, without the 2015 outlines.** Matched to each other at IoU ≥ 0.5: 29,567 pairs, with a median IoU of 0.81. 91% of Esri's outlines have a SAM 3 match and 78% of SAM 3's have an Esri match. Of SAM 3's 12,148 outlines with no 2015 match, 4,923 match an Esri outline. Where two independent models agree and no 2015 outline matches, the building is most likely new or changed since 2015.
 
-**What the screenshots show.** The private report has eight screenshots: two typical areas and six picked by rule, each the 300 m square with the most of one kind of difference. In a new subdivision with no 2015 outlines, both models outline every house. At an apartment complex, Esri outlines long carport and garage rows that SAM 3 mostly misses. On older streets, SAM 3 outlines more back-yard garages and sheds. Long industrial roofs are split where SAM 3's tiles meet. Some 2015 outlines sit in empty fields, where buildings have since been demolished.
+**What the screenshots show.** The [PDF report](Lewisville_building_footprint_comparison.pdf) has eight screenshots: two typical areas and six picked by rule, each the 300 m square with the most of one kind of difference. In a new subdivision with no 2015 outlines, both models outline every house. At an apartment complex, Esri outlines long carport and garage rows that SAM 3 mostly misses. On older streets, SAM 3 outlines more back-yard garages and sheds. Long industrial roofs are split where SAM 3's tiles meet. Some 2015 outlines sit in empty fields, where buildings have since been demolished.
 
 ## Old Town sample: the untuned baseline
 
