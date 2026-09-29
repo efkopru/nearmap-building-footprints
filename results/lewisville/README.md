@@ -1,20 +1,21 @@
-# Lewisville, Texas: results so far
+# Lewisville, Texas: final results
 
-This page compares SAM 3 and Esri's building model on Nearmap's May 2026 imagery of Lewisville (10.16 cm), across the whole city and on an Old Town sample. **Every score here measures agreement with the city's building outlines collected in 2015 or earlier, not accuracy.** Accuracy comes once two sample areas are reviewed against the 2026 imagery. Screenshots of the results stay in a private report because the imagery is licensed; this page has aggregate numbers and imagery-free charts only.
+This page compares SAM 3 and Esri's building model on Nearmap's May 2026 imagery of Lewisville (10.16 cm), across the whole city, on an Old Town sample and in a separate test area, with each model's settings frozen by a fixed rule. **Every score here measures agreement with the city's building outlines collected in 2015 or earlier, not accuracy.** Outlines for an accuracy check were prepared for two sample areas but not reviewed. Screenshots of the results stay in a private report because the imagery is licensed; this page has aggregate numbers and imagery-free charts only.
 
 ## Key findings
 
+- **Test area, frozen settings.** F1 on main buildings, scored once against the test area's 2015 outlines: the city's Esri run 0.95, the local Esri run 0.91, SAM 3 0.87.
 - **Esri leads on main buildings.** City-wide F1 on buildings of 20 m² and up: the city's Esri run 0.83, SAM 3 0.74. Recall is close (0.85 against 0.82); SAM 3 draws more outlines that the 2015 layer lacks (precision 0.68 against 0.82).
 - **The two models mostly agree.** 91% of Esri's outlines have a matching SAM 3 outline, and both find 94% and 90% of the 2015 outlines of 100 m² and up. Matched to the 2015 outlines, SAM 3's outlines fit slightly more tightly (median IoU 0.80 against 0.77).
 - **SAM 3 finds more small structures, but sheds are still missed.** Of the 7,867 2015 outlines under 20 m², SAM 3 matched 267 and Esri 2; 7,599 were found by neither.
 - **Many extra outlines are likely new buildings.** 4,923 of SAM 3's outlines with no 2015 match also match an Esri outline, such as whole subdivisions built since 2015.
 - **Large buildings break up.** Buildings longer than a processing tile come out in pieces: SAM 3 finds only parts or splits them where tiles meet, and Esri's outlines are cut at its chip edges.
 - **Esri's post-processing helps.** The same Esri model run locally without it, at a 0.9 cut-off, scores F1 0.77 on main buildings against the city run's 0.83. It finds more small structures (352 under 20 m²) but draws many more extra outlines.
-- **SAM 3's settings matter.** On main buildings in Old Town, 1536 px tiles, the prompt "building" and a 0.7 cut-off raised its F1 to 0.53, from 0.46 with the best 1024 px setting. Those settings were used for the city-wide run.
+- **SAM 3's settings matter.** On main buildings in Old Town, 1536 px tiles, the prompt "building" and a 0.7 cut-off raised its F1 to 0.53, from 0.48 with the best 1024 px setting. Those are the frozen settings and the ones the city-wide run used.
 
 ## City-wide: SAM 3 and Esri against the 2015 outlines
 
-The city ran Esri's Building Footprint Extraction – USA model on the same May 2026 capture. SAM 3 ran on all 6,538 tiles of 1536 px covering the city, with the best settings from the preliminary Old Town runs: the prompt "building" and a 0.7 confidence cut-off. The same Esri model also ran locally over the whole city, in 150 chunks. All three went through the same cleanup and are scored against the 38,882 older outlines inside the city limits. The numbers are also in [citywide_scores.csv](citywide_scores.csv) and [citywide_by_size.csv](citywide_by_size.csv).
+The city ran Esri's Building Footprint Extraction – USA model on the same May 2026 capture. SAM 3 ran on all 6,538 tiles of 1536 px covering the city, with the settings the tuning rule later froze: the prompt "building" and a 0.7 confidence cut-off. The same Esri model also ran locally over the whole city, in 150 chunks. All three went through the same cleanup and are scored against the 38,882 older outlines inside the city limits. The numbers are also in [citywide_scores.csv](citywide_scores.csv) and [citywide_by_size.csv](citywide_by_size.csv).
 
 | Method | Outlines | Matched | Extra | Missed | Precision | Recall | F1 | F1, 20 m² and up | Median IoU |
 |---|---|---|---|---|---|---|---|---|---|
@@ -57,41 +58,61 @@ A 700 m square around Old Town with 319 of the 2015 outlines, every method at it
 | Esri, city run | 0.64 | 0.69 | 0.01 |
 | Esri, local raw | 0.71 | 0.36 | 0.10 |
 
-## First tuning runs (preliminary)
+## Tuning in Old Town
 
-The objective, fixed in advance in the [tuning protocol](tuning_protocol.md), is F1 at IoU ≥ 0.5 on main buildings of 20 m² and up in the Old Town square. These scores use the 2015 outlines. Settings are chosen once Old Town's outlines have been reviewed, then scored once on a separate test area. Every combination is in [tuning_preliminary.csv](tuning_preliminary.csv).
+The objective, fixed in advance in the [tuning protocol](tuning_protocol.md), is F1 at IoU ≥ 0.5 on main buildings of 20 m² and up in the Old Town square. With no reviewed outlines available, the final tuning used the 2015 outlines ([Amendment 1](tuning_protocol.md#amendment-1-2026-09-29)), and the cut-off ranges were extended because the best values sat at the top of the original ranges. All 176 variants are in [tuning_final.csv](tuning_final.csv); regularization never changed a score, so the tables show it off.
 
 Best F1 for each setting. These scores count only buildings of 20 m² and up, so they run higher than the baseline table above. Shed recall is the share of 2015 outlines under 20 m² that were found.
 
 | Method | Setting | Precision | Recall | F1 | Shed recall |
 |---|---|---|---|---|---|
-| Esri, city run | as published | 0.69 | 0.55 | 0.61 | 0.00 |
-| Esri, local raw | ≥ 0.9 | 0.56 | 0.50 | 0.53 | 0.03 |
-| SAM 3 | "building", 1536 px, ≥ 0.7 | 0.53 | 0.52 | 0.53 | 0.03 |
-| SAM 3 | "building", 2048 px, ≥ 0.7 | 0.55 | 0.50 | 0.53 | 0.01 |
+| Esri, city run | as published (frozen) | 0.69 | 0.55 | 0.61 | 0.00 |
+| SAM 3 | "building", 2048 px, ≥ 0.75 | 0.60 | 0.48 | 0.54 | 0.00 |
+| Esri, local raw | ≥ 0.9 (frozen) | 0.56 | 0.50 | 0.53 | 0.03 |
+| SAM 3 | "building", 1536 px, ≥ 0.7 (frozen) | 0.53 | 0.52 | 0.53 | 0.03 |
 | SAM 3 | "house", 1536 px, ≥ 0.7 | 0.60 | 0.42 | 0.50 | 0.03 |
+| SAM 3 | "roof", 2048 px, ≥ 0.75 | 0.54 | 0.46 | 0.49 | 0.01 |
 | SAM 3 | "house", 2048 px, ≥ 0.5 | 0.49 | 0.48 | 0.48 | 0.04 |
-| SAM 3 | "roof", 2048 px, ≥ 0.7 | 0.48 | 0.47 | 0.47 | 0.01 |
-| SAM 3 | "building", 1024 px, ≥ 0.7 | 0.44 | 0.49 | 0.46 | 0.04 |
+| SAM 3 | "building", 1024 px, ≥ 0.75 | 0.48 | 0.47 | 0.48 | 0.01 |
 | SAM 3 | "roof", 1536 px, ≥ 0.7 | 0.41 | 0.50 | 0.45 | 0.03 |
 | SAM 3 | "house", 1024 px, ≥ 0.4 | 0.38 | 0.51 | 0.44 | 0.14 |
-| SAM 3 | "roof", 1024 px, ≥ 0.7 | 0.30 | 0.47 | 0.36 | 0.08 |
+| SAM 3 | "roof", 1024 px, ≥ 0.8 | 0.38 | 0.43 | 0.41 | 0.04 |
 
 SAM 3 F1 by prompt, tile size and confidence cut-off:
 
-| Prompt | Tile size | ≥ 0.3 | ≥ 0.4 | ≥ 0.5 | ≥ 0.6 | ≥ 0.7 |
-|---|---|---|---|---|---|---|
-| "building" | 1024 px | 0.38 | 0.41 | 0.43 | 0.44 | 0.46 |
-| "building" | 1536 px | 0.43 | 0.46 | 0.46 | 0.49 | 0.53 |
-| "building" | 2048 px | 0.43 | 0.46 | 0.47 | 0.51 | 0.53 |
-| "house" | 1024 px | 0.43 | 0.44 | 0.43 | 0.43 | 0.42 |
-| "house" | 1536 px | 0.44 | 0.47 | 0.46 | 0.47 | 0.50 |
-| "house" | 2048 px | 0.44 | 0.47 | 0.48 | 0.48 | 0.45 |
-| "roof" | 1024 px | 0.29 | 0.31 | 0.34 | 0.35 | 0.36 |
-| "roof" | 1536 px | 0.34 | 0.37 | 0.39 | 0.41 | 0.45 |
-| "roof" | 2048 px | 0.36 | 0.40 | 0.42 | 0.44 | 0.47 |
+| Prompt | Tile size | ≥ 0.3 | ≥ 0.4 | ≥ 0.5 | ≥ 0.6 | ≥ 0.7 | ≥ 0.75 | ≥ 0.8 | ≥ 0.85 | ≥ 0.9 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| "building" | 1024 px | 0.38 | 0.41 | 0.43 | 0.44 | 0.46 | 0.48 | 0.47 | 0.39 | 0.19 |
+| "building" | 1536 px | 0.43 | 0.46 | 0.46 | 0.49 | 0.53 | 0.52 | 0.51 | 0.47 | 0.28 |
+| "building" | 2048 px | 0.43 | 0.46 | 0.47 | 0.51 | 0.53 | 0.54 | 0.50 | 0.44 | 0.26 |
+| "house" | 1024 px | 0.43 | 0.44 | 0.43 | 0.43 | 0.42 | 0.42 | 0.41 | 0.36 | 0.17 |
+| "house" | 1536 px | 0.44 | 0.47 | 0.46 | 0.47 | 0.50 | 0.47 | 0.45 | 0.38 | 0.18 |
+| "house" | 2048 px | 0.44 | 0.47 | 0.48 | 0.48 | 0.45 | 0.44 | 0.41 | 0.36 | 0.17 |
+| "roof" | 1024 px | 0.29 | 0.31 | 0.34 | 0.35 | 0.36 | 0.37 | 0.41 | 0.40 | 0.29 |
+| "roof" | 1536 px | 0.34 | 0.37 | 0.39 | 0.41 | 0.45 | 0.45 | 0.45 | 0.42 | 0.33 |
+| "roof" | 2048 px | 0.36 | 0.40 | 0.42 | 0.44 | 0.47 | 0.49 | 0.46 | 0.39 | 0.26 |
 
-Bigger tiles and higher cut-offs help. The best cut-off, 0.7, is the top of the range fixed in advance, so testing higher cut-offs is proposed as a protocol change before the reviewed outlines are used. The local Esri run's cut-off sweep: ≥ 0.5: 0.43 · ≥ 0.6: 0.46 · ≥ 0.7: 0.49 · ≥ 0.8: 0.51 · ≥ 0.9: 0.53.
+Bigger tiles and higher cut-offs help up to about 0.75; above that, recall falls faster than precision rises. The local Esri run's cut-off sweep: ≥ 0.5: 0.43 · ≥ 0.6: 0.46 · ≥ 0.7: 0.49 · ≥ 0.8: 0.51 · ≥ 0.9: 0.53 · ≥ 0.95: 0.48.
+
+## Frozen settings and the test area
+
+Each model's settings were frozen by the rule in the protocol: the highest F1, and within 0.01 of it, the variant closest to the defaults. SAM 3's best, 2048 px at 0.75 (F1 0.54), is within 0.01 of 1536 px at 0.7 (0.53), so the rule keeps the latter.
+
+| Method | Frozen settings |
+|---|---|
+| Esri, city run | as published, regularization off |
+| SAM 3 | "building", 1536 px tiles, cut-off 0.7, regularization off |
+| Esri, local raw run | cut-off 0.9, regularization off |
+
+These are exactly the settings of the city-wide runs. The test area, a 700 m square chosen by a seeded random rule, was then scored once against its 2015 outlines from the city-wide outputs. Main buildings of 20 m² and up; the numbers are also in [test_area_scores.csv](test_area_scores.csv).
+
+| Method | Matched | Extra | Missed | Precision | Recall | F1 | Median IoU | F1, all sizes |
+|---|---|---|---|---|---|---|---|---|
+| Esri, city run | 445 | 16 | 26 | 0.97 | 0.94 | 0.95 | 0.76 | 0.83 |
+| SAM 3 | 430 | 92 | 41 | 0.82 | 0.91 | 0.87 | 0.75 | 0.76 |
+| Esri, local raw run | 422 | 30 | 49 | 0.93 | 0.90 | 0.91 | 0.79 | 0.80 |
+
+Agreement is far higher than in Old Town, where much has been built or rebuilt since 2015, but the order is the same. SAM 3 finds nearly as many of the 2015 buildings (recall 0.91) but draws more outlines they lack (precision 0.82). Sheds are missed everywhere: at most 2 of the 136 outlines under 20 m².
 
 ## Runtime on a laptop RTX 4050 (6 GB)
 
@@ -115,8 +136,8 @@ SAM 3 used up to 96% of the GPU's memory, close to the limit but stable through 
 - **Scoring,** identical for every method: EPSG:26914, 4 m² minimum, duplicate suppression, one-to-one matching at IoU ≥ 0.5, and buildings crossing an area's edge excluded.
 - **Screenshot areas** were picked by a fixed rule and kept at least 500 m from both review areas, so the reviews stay independent of the models.
 
-## Next
+## What would come next
 
-1. Review Old Town's outlines against the 2026 imagery, then choose each model's settings by the fixed rule. A new cut-off needs only cleanup; a new prompt or tile size means rerunning SAM 3 on the city, under 3 hours.
-2. Review the test area, a 700 m square chosen by a seeded random rule, and score the frozen settings there once. That is the accuracy result.
-3. Decide on fine-tuning if sheds matter: neither model finds most of them.
+1. **For accuracy:** review the Old Town and test-area outlines against the 2026 imagery (the review packages are ready), then score the frozen settings against them. No tuning is needed again.
+2. **For sheds:** fine-tune a model on labelled small structures; none of these finds them.
+3. **For large buildings:** merge outlines across tile seams, or use larger tiles in commercial and industrial areas.
