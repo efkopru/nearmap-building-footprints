@@ -1,8 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 362" width="760" height="362" role="img"><style>
 svg { --ink:#121a1c; --ink2:#485456; --muted:#6f7a7c; --hair:#dce2e0; --axis:#c3cac8; --bg:#fcfcfb;
-      --esri:#e60000; --sam3:#ff8c00; --both:#2a78d6; --none:#c3cac8; --none-ink:#121a1c; }
+      --esri:#e60000; --sam3:#2a78d6; --both:#4a3aa7; --none:#c3cac8; --none-ink:#121a1c; }
 @media (prefers-color-scheme: dark) { svg { --ink:#eef2f1; --ink2:#b6c0bf; --muted:#8e9896; --hair:#2b3131; --axis:#3d4545; --bg:#1a1c1c;
-      --esri:#b51818; --sam3:#d67400; --both:#3987e5; --none:#3d4545; --none-ink:#eef2f1; } }
+      --esri:#b51818; --sam3:#3987e5; --both:#9085e9; --none:#3d4545; --none-ink:#eef2f1; } }
 text { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; fill: var(--ink2); font-size: 13px; }
 .t { fill: var(--ink); font-size: 15px; font-weight: 600; } .v { fill: var(--ink); font-size: 12px; font-weight: 600; }
 .m { fill: var(--muted); font-size: 11px; } .in { font-size: 12px; font-weight: 600; } .in-white { fill: #ffffff; } .in-dark { fill: #121a1c; } .in-none { fill: var(--none-ink); } .g { stroke: var(--hair); } .a { stroke: var(--axis); }
