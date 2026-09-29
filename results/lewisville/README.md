@@ -9,22 +9,24 @@ This page compares SAM 3 and Esri's building model on Nearmap's May 2026 imagery
 - **SAM 3 finds more small structures, but sheds are still missed.** Of the 7,867 2015 outlines under 20 m², SAM 3 matched 267 and Esri 2; 7,599 were found by neither.
 - **Many extra outlines are likely new buildings.** 4,923 of SAM 3's outlines with no 2015 match also match an Esri outline, such as whole subdivisions built since 2015.
 - **Large buildings break up.** Buildings longer than a processing tile come out in pieces: SAM 3 finds only parts or splits them where tiles meet, and Esri's outlines are cut at its chip edges.
+- **Esri's post-processing helps.** The same Esri model run locally without it, at a 0.9 cut-off, scores F1 0.77 on main buildings against the city run's 0.83. It finds more small structures (352 under 20 m²) but draws many more extra outlines.
 - **SAM 3's settings matter.** On main buildings in Old Town, 1536 px tiles, the prompt "building" and a 0.7 cut-off raised its F1 to 0.53, from 0.46 with the best 1024 px setting. Those settings were used for the city-wide run.
 
 ## City-wide: SAM 3 and Esri against the 2015 outlines
 
-The city ran Esri's Building Footprint Extraction – USA model on the same May 2026 capture. SAM 3 ran on all 6,538 tiles of 1536 px covering the city, with the best settings from the preliminary Old Town runs: the prompt "building" and a 0.7 confidence cut-off. Both went through the same cleanup and are scored against the 38,882 older outlines inside the city limits. The numbers are also in [citywide_scores.csv](citywide_scores.csv) and [citywide_by_size.csv](citywide_by_size.csv).
+The city ran Esri's Building Footprint Extraction – USA model on the same May 2026 capture. SAM 3 ran on all 6,538 tiles of 1536 px covering the city, with the best settings from the preliminary Old Town runs: the prompt "building" and a 0.7 confidence cut-off. The same Esri model also ran locally over the whole city, in 150 chunks. All three went through the same cleanup and are scored against the 38,882 older outlines inside the city limits. The numbers are also in [citywide_scores.csv](citywide_scores.csv) and [citywide_by_size.csv](citywide_by_size.csv).
 
 | Method | Outlines | Matched | Extra | Missed | Precision | Recall | F1 | F1, 20 m² and up | Median IoU |
 |---|---|---|---|---|---|---|---|---|---|
 | Esri, city run | 32,608 | 26,502 | 6,106 | 12,380 | 0.81 | 0.68 | 0.74 | 0.83 | 0.77 |
 | SAM 3 | 37,906 | 25,758 | 12,148 | 13,124 | 0.68 | 0.66 | 0.67 | 0.74 | 0.80 |
+| Esri, local raw run | 38,860 | 26,536 | 12,324 | 12,346 | 0.68 | 0.68 | 0.68 | 0.77 | 0.80 |
 
-Extra outlines are not all errors: many are buildings built since 2015.
+Extra outlines are not all errors: many are buildings built since 2015. The local raw run is the same Esri model through `DetectObjectsUsingDeepLearning`, without Esri's post-processing, kept at a 0.9 cut-off; the charts below compare the city's Esri run with SAM 3.
 
 ![Column chart: share of the 2015 outlines each model found, by building size](city_recall_by_size.svg)
 
-| Building size | 2015 outlines | Found by Esri | Found by SAM 3 | Found by both | Only Esri | Only SAM 3 | Missed by both |
+| Building size | 2015 outlines | Found by Esri, city run | Found by SAM 3 | Found by both | Only Esri | Only SAM 3 | Missed by both |
 |---|---|---|---|---|---|---|---|
 | under 20 m² | 7,867 | 2 (0.0%) | 267 (3.4%) | 1 | 1 | 266 | 7,599 |
 | 20–50 m² | 2,346 | 194 (8.3%) | 577 (24.6%) | 107 | 87 | 470 | 1,682 |
@@ -33,7 +35,7 @@ Extra outlines are not all errors: many are buildings built since 2015.
 
 ![Stacked bars: what happened to each 2015 outline, by building size](city_outcomes_by_size.svg)
 
-Of the 38,882 2015 outlines, both models found 24,585, Esri alone 1,917, SAM 3 alone 1,173 and neither 11,207. Most of those missed by both are sheds under 20 m²; some others have been demolished since 2015.
+Of the 38,882 2015 outlines, both models found 24,585, Esri alone 1,917, SAM 3 alone 1,173 and neither 11,207. Most of those missed by both are sheds under 20 m²; some others have been demolished since 2015. Adding the local Esri run, 10,463 outlines are missed by all three, 7,359 of them under 20 m².
 
 **SAM 3 against Esri, without the 2015 outlines.** Matched to each other at IoU ≥ 0.5: 29,567 pairs, with a median IoU of 0.81. 91% of Esri's outlines have a SAM 3 match and 78% of SAM 3's have an Esri match. Of SAM 3's 12,148 outlines with no 2015 match, 4,923 match an Esri outline. Where two independent models agree and no 2015 outline matches, the building is most likely new or changed since 2015.
 
@@ -97,7 +99,8 @@ Bigger tiles and higher cut-offs help. The best cut-off, 0.7, is the top of the 
 |---|---|---|---|
 | SAM 3, 1024 px tiles | 90 tiles (Old Town) | 105 s (0.82 s per tile) | about 3.3 h, estimated |
 | SAM 3, 1536 px tiles | 6,538 tiles (whole city) | 2 h 41 min (median 1.08 s of model time per tile) | measured |
-| Esri, local raw run | 0.64 km² (Old Town) | 4.9 min | about 20 h in 150 chunks, running now |
+| Esri, local raw run | 0.64 km² (Old Town) | 4.9 min | about 15 h, estimated |
+| Esri, local raw run | 150 chunks of about 1.1 km (whole city) | 8 h 46 min of model time | measured |
 
 SAM 3 used up to 96% of the GPU's memory, close to the limit but stable through the city-wide run.
 
@@ -114,7 +117,6 @@ SAM 3 used up to 96% of the GPU's memory, close to the limit but stable through 
 
 ## Next
 
-1. The local Esri city run finishes in about a day; its city-wide scores will be added here.
-2. Review Old Town's outlines against the 2026 imagery, then choose each model's settings by the fixed rule. A new cut-off needs only cleanup; a new prompt or tile size means rerunning SAM 3 on the city, under 3 hours.
-3. Review the test area, a 700 m square chosen by a seeded random rule, and score the frozen settings there once. That is the accuracy result.
-4. Decide on fine-tuning if sheds matter: neither model finds most of them.
+1. Review Old Town's outlines against the 2026 imagery, then choose each model's settings by the fixed rule. A new cut-off needs only cleanup; a new prompt or tile size means rerunning SAM 3 on the city, under 3 hours.
+2. Review the test area, a 700 m square chosen by a seeded random rule, and score the frozen settings there once. That is the accuracy result.
+3. Decide on fine-tuning if sheds matter: neither model finds most of them.
