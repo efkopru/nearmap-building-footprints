@@ -8,7 +8,7 @@
 
 `nbf` is a Python command-line tool. It tiles GeoTIFF or VRT mosaics, runs four SAM 3 prompting modes alongside an Esri Mask R-CNN baseline and imported vendor vectors, suppresses duplicate polygons from overlapping tiles, and scores each method with one-to-one matching. Every stage records hashes and receipts, so an output polygon can be traced back to the pixels, prompts, and model weights that produced it.
 
-> **Status:** The CPU pipeline is implemented and covered by 146 automated tests, run in CI on Windows and Ubuntu with Python 3.12 and 3.13. SAM 3 and Esri have both run on real aerial imagery, and the [final comparison report for Lewisville, Texas](https://github.com/efkopru/nearmap-building-footprints/blob/main/results/lewisville/README.md) is published: city-wide runs of SAM 3 and Esri, settings frozen by a fixed rule, and a one-time test-area score. It is scored against an older building inventory, so it measures agreement, not accuracy. Fine-tuning has not been run, and the figures are synthetic illustrations. [Details](#project-status)
+> **Status:** The CPU pipeline is implemented and covered by 151 automated tests, run in CI on Windows and Ubuntu with Python 3.12 and 3.13. SAM 3 and Esri have both run on real aerial imagery, and the [final comparison report for Lewisville, Texas](https://github.com/efkopru/nearmap-building-footprints/blob/main/results/lewisville/README.md) is published: city-wide runs of SAM 3 and Esri, settings frozen by a fixed rule, and a one-time test-area score. It is scored against an older building inventory, so it measures agreement, not accuracy. Fine-tuning has not been run, and the figures are synthetic illustrations. [Details](#project-status)
 
 ![Workflow from local georeferenced imagery through tiling, SAM 3 and baseline extraction, polygon cleanup, and held-out evaluation, with an optional fine-tuning route](https://raw.githubusercontent.com/efkopru/nearmap-building-footprints/main/docs/images/workflow.png)
 
@@ -191,12 +191,14 @@ ruff check .
 | --- | --- |
 | `src/nearmap_buildings/` | CLI, tiling, SAM 3 adapter, cleanup, evaluation, comparison, training, and baseline adapters |
 | `tests/` | CPU tests for geometry, raster I/O, adapters, matching, spatial splits, and checkpoint formats |
+| `notebooks/` | Walkthroughs of preparing imagery, running SAM 3 and Esri, and scoring, executed on synthetic data |
 | `scripts/` | CPU and GPU environment setup, a config-driven experiment runner, and the figure generator |
 | `configs/` | Example experiment runs and the SAM 3 training recipe |
 | `docs/` | Usage, methodology, prompt formats, optional methods, sources, and the validation record |
 
 ## Documentation
 
+- [Notebooks](https://github.com/efkopru/nearmap-building-footprints/blob/main/notebooks/README.md): how the models are run and scored, step by step, from imagery preparation to a once-scored test area
 - [Setup and usage](https://github.com/efkopru/nearmap-building-footprints/blob/main/docs/USAGE.md): installation, every command, and GPU setup
 - [Methodology](https://github.com/efkopru/nearmap-building-footprints/blob/main/docs/METHODOLOGY.md): label conventions, spatial splits, metrics, and reporting templates
 - [Prompt formats](https://github.com/efkopru/nearmap-building-footprints/blob/main/docs/PROMPTS.md): the GIS data contract for exemplar, box, and point prompts
