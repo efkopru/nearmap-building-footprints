@@ -22,7 +22,7 @@ Read [METHODOLOGY.md](METHODOLOGY.md) for the experimental design, [PROMPTS.md](
 
 ## 1. CPU environment on Windows
 
-Use Python **3.12** for this project; CI also tests 3.13. In PowerShell:
+Use Python **3.12**, **3.13** or **3.14**; CI tests all three on Windows and Ubuntu. In PowerShell:
 
 ```powershell
 Set-Location path\to\nearmap-building-footprints
@@ -34,7 +34,7 @@ py -3.12 -m venv .venv
 nbf doctor
 ```
 
-`scripts/setup_cpu.ps1` performs the same creation/install/test steps. Activation is optional: use `.\.venv\Scripts\nbf.exe` wherever the examples use `nbf`.
+`scripts/setup_cpu.ps1` performs the same creation/install/test steps with the first of Python 3.12, 3.13 and 3.14 that the `py` launcher finds. Without the launcher, or to choose one, pass it explicitly: `.\scripts\setup_cpu.ps1 -Python C:\Python314\python.exe`. The script refuses an existing `.venv` made with another Python version. Activation is optional: use `.\.venv\Scripts\nbf.exe` wherever the examples use `nbf`.
 
 For the CPU workflow on Linux, start in the cloned repository and run:
 
