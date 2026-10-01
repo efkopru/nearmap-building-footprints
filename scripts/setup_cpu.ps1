@@ -24,7 +24,8 @@ if (-not (Test-Path -LiteralPath '.venv\Scripts\python.exe')) {
     }
     if ($LASTEXITCODE -ne 0) { throw 'Creating .venv failed.' }
 }
-$venvVersion = & '.venv\Scripts\python.exe' -c 'import sys; print(f"{sys.version_info[0]}.{sys.version_info[1]}")'
+# No quotes inside the code: Windows PowerShell 5.1 strips embedded double quotes from native arguments.
+$venvVersion = & '.venv\Scripts\python.exe' -c 'import sys; print(*sys.version_info[:2], sep=chr(46))'
 if ($supported -notcontains $venvVersion) {
     throw ".venv uses Python $venvVersion; this project supports $($supported -join ', '). Delete .venv and run this script again."
 }
