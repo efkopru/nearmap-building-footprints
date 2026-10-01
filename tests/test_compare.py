@@ -221,3 +221,49 @@ def test_labels_must_match_reports_and_be_unique(tmp_path):
         compare_reports(paths, ["one"])
     with pytest.raises(ValueError, match="unique"):
         compare_reports(paths, ["same", "same"])
+
+
+def sized_report(predictions=None, bins=(50,)):
+    reference = frame([box(0, 0, 5, 5), box(20, 0, 30, 10)])
+    predictions = reference if predictions is None else predictions
+    return evaluate(predictions, reference, frame([box(-10, -10, 100, 100)]), crs=CRS, size_bins=list(bins)).report
+
+
+def test_by_size_csv_lists_classes_and_thresholds_per_method(tmp_path):
+    first = save(tmp_path, "a", sized_report())
+    second = save(tmp_path, "b", sized_report(frame([box(20, 0, 30, 10)])))
+    output, by_size = tmp_path / "comparison.csv", tmp_path / "by_size.csv"
+    main(["--reports", str(first), str(second), "--labels", "a", "b", "--output", str(output),
+          "--by-size", str(by_size)])
+    rows = list(csv.DictReader(by_size.open(encoding="utf-8")))
+    assert [(row["label"], row["kind"], row["size_class"]) for row in rows] == [
+        ("a", "class", "<50"), ("a", "class", ">=50"), ("a", "at_least", ">=50"),
+        ("b", "class", "<50"), ("b", "class", ">=50"), ("b", "at_least", ">=50")]
+    small_b = rows[3]
+    assert (small_b["reference"], small_b["matched_reference"], small_b["recall"]) == ("1", "0", "0.0")
+
+
+def test_by_size_needs_reports_made_with_size_bins(tmp_path):
+    path = save(tmp_path, "a", report())
+    with pytest.raises(ValueError, match="--size-bins-m2"):
+        main(["--reports", str(path), "--output", str(tmp_path / "c.csv"), "--by-size", str(tmp_path / "s.csv")])
+    assert not (tmp_path / "c.csv").exists()
+
+
+def test_reports_with_different_size_bins_are_not_compared(tmp_path):
+    first = save(tmp_path, "a", sized_report(bins=(50,)))
+    second = save(tmp_path, "b", sized_report(bins=(20,)))
+    with pytest.raises(ValueError, match="size_bins_m2"):
+        compare_reports([first, second])
+    unsized = save(tmp_path, "c", report())
+    with pytest.raises(ValueError, match="size_bins_m2"):
+        compare_reports([first, unsized])
+
+
+def test_per_building_records_each_reference_size_class(tmp_path):
+    reference = frame([box(0, 0, 5, 5), box(20, 0, 30, 10)])
+    reference_path = tmp_path / "reference.gpkg"
+    reference.to_file(reference_path)
+    first = save(tmp_path, "a", sized_report())
+    buildings = per_building([first], ["a"], reference_path)
+    assert list(buildings.size_class) == ["<50", ">=50"]

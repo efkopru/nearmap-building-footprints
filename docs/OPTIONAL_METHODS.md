@@ -16,6 +16,23 @@ This prints the call without importing ArcPy. Add `--execute` to run it. Create 
 
 The runner uses `arcpy.ia.DetectObjectsUsingDeepLearning` with the local package, polygon output (`return_bboxes False`), `NO_NMS`, and mosaicked-image processing. It adds `method=esri_building_usa`. Output is the raw polygon baseline, without regularization. It refuses existing outputs because this Esri tool can append detections. Postprocess and evaluate with the same settings used for the other methods. [Current ArcPy interface](https://pro.arcgis.com/en/pro-app/latest/tool-reference/image-analyst/detect-objects-using-deep-learning.htm)
 
+### A whole city in chunks
+
+One call over a city runs for hours with no way to resume, and ArcGIS Pro's GPU memory grows with each call in one process: in the Lewisville run the model failed to load with a CUDA out-of-memory error after 42 chunks. `nbf esri-chunks` splits the run into overlapping chunks, restarts ArcGIS Pro's Python every few chunks, and merges the results without counting overlaps twice. Tile the raster with `nbf tile` first; the plan covers only tiles with imagery.
+
+```powershell
+nbf esri-chunks plan --manifest data/prepared/city/manifest.json --output data/prepared/city_chunks --core 10240 --overlap 512
+nbf esri-chunks run --chunks data/prepared/city_chunks --gdb 'C:\analysis\esri_chunks.gdb' --done outputs/esri_city/done --model 'C:\models\BuildingFootprintExtractionUSA.dlpk' --per-process 8
+nbf esri-chunks merge --gdb 'C:\analysis\esri_chunks.gdb' --chunks data/prepared/city_chunks --done outputs/esri_city/done --crs EPSG:26914 --min-score 0.9 --output outputs/esri_city/raw.gpkg
+nbf clean --input outputs/esri_city/raw.gpkg --output outputs/esri_city/cleaned.gpkg --metric-crs EPSG:26914
+```
+
+- **plan** writes one small VRT per chunk, reading a window of the source raster, and `chunks.json`. Each chunk has a core, in source pixels, that no other chunk's core overlaps, plus `--overlap` pixels on every side so buildings on a core's edge are seen whole.
+- **run** prints the ArcGIS command; add `--execute` to start it. It runs `esri.py --chunks` in ArcGIS Pro's Python (`--arcgis-python`, by default the standard install path) for `--per-process` chunks at a time, then starts a fresh process. Each finished chunk writes a done-marker, so rerunning the same command resumes; a chunk interrupted midway is run again from the start. The run stops after `--max-failures` failed processes in a row. The detection options are those of `esri.py`. `nbf` clears inherited PROJ and GDAL settings for its own libraries but passes them on to ArcGIS Pro.
+- **merge** imports each chunk with the `esri` preset and keeps a detection only in the chunk whose core holds its representative point, decided in the raster's own CRS with half-open core bounds, so every detection belongs to exactly one chunk. Empty outlines are dropped and counted. `--min-score` applies a frozen confidence cut-off. `source_id` is `<chunk>:<OBJECTID>`, so every outline can be found again in ArcGIS Pro.
+
+Lewisville: 150 chunks of 10,240 px cores with 512 px overlap, 8 h 46 min of model time on an RTX 4050, 98,307 raw detections, 83,530 kept by core ownership, 41,751 at ≥ 0.9 and 39,840 after cleanup. That run used the notebook version of these steps ([notebook 3](../notebooks/03_run_esri.ipynb)), which the commands now package.
+
 ### Bring Esri output into the comparison
 
 Back in the CPU environment, import the feature class with the `esri` preset:
@@ -100,7 +117,7 @@ After training, run the local export in your existing Torch environment:
 nbf train export-checkpoint --input /path/to/outputs/sam3-buildings-v1/checkpoints/checkpoint.pt --output /path/to/models/buildings-inference.pt
 ```
 
-The command reads with `torch.load(weights_only=True, map_location="cpu")`, validates tensor values and expected native model components, and writes a new `model` dictionary whose keys start with `detector.`. It rejects already-prefixed, wrapped, interactive, partial-component, non-tensor, non-finite, and unknown-component states. It never retries with unrestricted pickle loading. Keep the original trainer checkpoint for resuming training because the export omits optimizer and training state. Architecture-level parameter shapes still require verification by loading the model in the compatible inference environment.
+The command reads with `torch.load(weights_only=True, map_location="cpu")`, validates tensor values and expected native model components, and writes a new `model` dictionary whose keys start with `detector.`. It rejects already-prefixed, wrapped, interactive, partial-component, non-tensor, non-finite, and unknown-component states. It never retries with unrestricted pickle loading. Keep the original trainer checkpoint for resuming training because the export omits optimizer and training state. Architecture-level parameter shapes still require verification by loading the model in the compatible inference environment. A CPU test with real PyTorch (`tests/test_checkpoint_torch.py`, its own CI job) saves a trainer-style checkpoint from a small model with SAM 3's native component names, exports it, passes the inference preflight checks, applies the inference builder's key filter, and loads the result strictly into a fresh model: every weight and buffer arrives unchanged and the model's output matches. It also shows that an unexported trainer checkpoint would leave nothing for that filter to keep.
 
 The adjacent file is **`buildings-inference.pt.metadata.json`**, formed by appending `.metadata.json` to the full checkpoint filename. Its contract is:
 
@@ -129,6 +146,6 @@ This prints a plan. Add `--execute` to run it, then use a separate new output di
 
 ## Verified scope
 
-Synthetic CPU tests exercise mask holes, column-major RLE, touching instances, IDs above 255, negative imagery, spatial exclusion, manifest/raster consistency, vector reprojection, dry-run behavior, and checkpoint key conversion. A mocked serialization test verifies safe load arguments and metadata hashes without installing Torch. No ArcPy inference, proprietary imagery processing, real checkpoint loading, Hydra model instantiation, or GPU fine-tuning was performed. The configuration is a concrete source-verified starting recipe, not a demonstrated accuracy result.
+Synthetic CPU tests exercise mask holes, column-major RLE, touching instances, IDs above 255, negative imagery, spatial exclusion, manifest/raster consistency, vector reprojection, dry-run behavior, and checkpoint key conversion. A mocked serialization test verifies safe load arguments and metadata hashes without installing Torch, and a real-PyTorch CPU test exports and reloads a small stand-in model's checkpoint. No SAM 3 checkpoint from real training has been exported or loaded, and no Hydra model instantiation or GPU fine-tuning was performed. The configuration is a concrete source-verified starting recipe, not a demonstrated accuracy result.
 
 On Windows, a system `PROJ_LIB` or `PROJ_DATA` from PostGIS can override rasterio's bundled database. If the CPU environment reports a PROJ database-version conflict, clear those variables **only in the preparation/test shell** so the wheel uses its own database. Do not remove ArcGIS environment settings from the ArcGIS clone.

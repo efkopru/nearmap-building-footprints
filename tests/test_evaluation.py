@@ -173,3 +173,44 @@ def test_cli_requires_independent_holdout_acknowledgement(tmp_path):
     with pytest.raises(SystemExit):
         main(["--predictions", "a.gpkg", "--reference", "b.gpkg", "--aoi", "c.gpkg",
               "--metric-crs", CRS, "--output-json", str(tmp_path / "metrics.json")])
+
+
+def test_size_classes_split_recall_by_reference_area_and_precision_by_prediction_area():
+    # References of 9, 25 and 400 m2; the 25 m2 one is missed and a 16 m2 prediction is extra.
+    reference = frame([box(0, 0, 3, 3), box(10, 0, 15, 5), box(30, 0, 50, 20)])
+    predictions = frame([box(0, 0, 3, 3), box(30, 0, 50, 20), box(60, 0, 64, 4)])
+    result = evaluate(predictions, reference, aoi(), crs=CRS, size_bins=[20, 100])
+    report = result.report
+    assert report["size_bins_m2"] == [20.0, 100.0]
+    classes = {entry["size_class"]: entry for entry in report["size_classes"]}
+    assert list(classes) == ["<20", "20-100", ">=100"]
+    assert (classes["<20"]["reference"], classes["<20"]["predictions"]) == (1, 2)
+    assert (classes["<20"]["recall"], classes["<20"]["precision"]) == (1.0, 0.5)
+    assert classes["<20"]["f1"] == pytest.approx(2 / 3)
+    # Only a missed reference: recall 0, no predictions, F1 0 as for the overall score.
+    assert (classes["20-100"]["recall"], classes["20-100"]["precision"], classes["20-100"]["f1"]) == (0.0, None, 0.0)
+    assert (classes[">=100"]["recall"], classes[">=100"]["precision"]) == (1.0, 1.0)
+    thresholds = {entry["min_m2"]: entry for entry in report["size_thresholds"]}
+    assert (thresholds[20.0]["reference"], thresholds[20.0]["matched_reference"]) == (2, 1)
+    assert thresholds[20.0]["precision"] == 1.0
+    assert report["evaluated_reference_size_classes"] == ["<20", "20-100", ">=100"]
+    assert list(result.layers["unmatched_predictions"].size_class) == ["<20"]
+
+
+def test_area_on_an_edge_belongs_to_the_class_above():
+    reference = frame([box(0, 0, 4, 5)])
+    report = evaluate(reference, reference, aoi(), crs=CRS, size_bins=[20]).report
+    assert report["evaluated_reference_size_classes"] == [">=20"]
+
+
+def test_without_size_bins_the_report_has_no_size_classes():
+    reference = frame([box(0, 0, 4, 5)])
+    report = evaluate(reference, reference, aoi(), crs=CRS).report
+    assert report["size_bins_m2"] is None and "size_classes" not in report
+
+
+@pytest.mark.parametrize("bins", [[], [0], [-5], [50, 20], [20, 20], [float("nan")]])
+def test_invalid_size_bins_are_refused(bins):
+    reference = frame([box(0, 0, 4, 5)])
+    with pytest.raises(ValueError, match="size bins"):
+        evaluate(reference, reference, aoi(), crs=CRS, size_bins=bins)

@@ -8,8 +8,10 @@ projected CRS. AOI-crossing objects are excluded by default and counted explicit
 from __future__ import annotations
 
 import argparse
+from bisect import bisect_right
 from dataclasses import dataclass
 import hashlib
+import math
 import json
 from pathlib import Path
 
@@ -75,6 +77,72 @@ def row_order_fingerprint(frame: gpd.GeoDataFrame) -> str:
                             [_normalized_wkb(geometry) for geometry in frame.geometry])
 
 
+def size_bin_edges(edges) -> list[float]:
+    """Validate size-class edges in square metres: positive, finite and increasing."""
+    edges = [float(edge) for edge in edges]
+    if not edges or any(not math.isfinite(edge) or edge <= 0 for edge in edges) \
+            or any(b <= a for a, b in zip(edges, edges[1:])):
+        raise ValueError("size bins must be positive, finite, strictly increasing areas in m2")
+    return edges
+
+
+def _edge_text(value: float) -> str:
+    return f"{value:g}"
+
+
+def size_class_labels(edges) -> list[str]:
+    """Labels for the classes the edges make, e.g. [20, 50] gives <20, 20-50 and >=50."""
+    text = [_edge_text(edge) for edge in edges]
+    return [f"<{text[0]}", *(f"{a}-{b}" for a, b in zip(text, text[1:])), f">={text[-1]}"]
+
+
+def size_class(area: float, edges, labels) -> str:
+    # bisect_right puts an area exactly on an edge in the class above it.
+    return labels[bisect_right(edges, area)]
+
+
+def _ratio(numerator, denominator):
+    return numerator / denominator if denominator else None
+
+
+def _subset_metrics(reference_selected, reference_matched, prediction_selected, prediction_matched):
+    """Recall over the selected references, precision over the selected predictions."""
+    references, predictions = int(reference_selected.sum()), int(prediction_selected.sum())
+    matched_references = int((reference_selected & reference_matched).sum())
+    matched_predictions = int((prediction_selected & prediction_matched).sum())
+    precision, recall = _ratio(matched_predictions, predictions), _ratio(matched_references, references)
+    if precision is None or recall is None:
+        # Like the overall F1: zero when only one side is empty, undefined when both are.
+        f1 = 0.0 if (references or predictions) else None
+    else:
+        f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
+    return {"reference": references, "matched_reference": matched_references,
+            "predictions": predictions, "matched_predictions": matched_predictions,
+            "precision": precision, "recall": recall, "f1": f1}
+
+
+def size_metrics(reference_areas, reference_matched, prediction_areas, prediction_matched, edges):
+    """Per-class and at-or-above-edge metrics from one global matching.
+
+    A reference counts in the class of its own area, and so does a prediction, so
+    recall in a class is over its references and precision over its predictions.
+    Matching is not redone per class: a matched pair may span two classes.
+    """
+    labels = size_class_labels(edges)
+    reference_areas, prediction_areas = np.asarray(reference_areas, float), np.asarray(prediction_areas, float)
+    reference_matched, prediction_matched = np.asarray(reference_matched, bool), np.asarray(prediction_matched, bool)
+    bounds = [0.0, *edges, math.inf]
+    classes = []
+    for label, low, high in zip(labels, bounds, bounds[1:]):
+        classes.append({"size_class": label, "min_m2": low, "max_m2": None if math.isinf(high) else high,
+                        **_subset_metrics((reference_areas >= low) & (reference_areas < high), reference_matched,
+                                          (prediction_areas >= low) & (prediction_areas < high), prediction_matched)})
+    thresholds = [{"min_m2": edge, **_subset_metrics(reference_areas >= edge, reference_matched,
+                                                     prediction_areas >= edge, prediction_matched)}
+                  for edge in edges]
+    return classes, thresholds
+
+
 @dataclass
 class EvaluationResult:
     report: dict
@@ -91,7 +159,7 @@ def _validate(frame: gpd.GeoDataFrame, label: str, target):
         if not isinstance(geometry, (Polygon, MultiPolygon)) or not geometry.is_valid or geometry.area <= 0:
             raise ValueError(f"{label}: invalid/nonpolygon geometry at row {index}; repair and review before evaluation")
     reserved = {"eval_id", "aoi_action", "aoi_boundary_touch", "match_id", "match_iou",
-                "area_error_m2", "relative_area_error", "boundary_hausdorff_m"}
+                "area_error_m2", "relative_area_error", "boundary_hausdorff_m", "size_class"}
     if reserved.intersection(frame.columns):
         raise ValueError(f"{label}: input contains reserved evaluation fields")
     return frame
@@ -185,14 +253,17 @@ def _summary(values):
 
 def evaluate(predictions: gpd.GeoDataFrame, reference: gpd.GeoDataFrame,
              aoi: gpd.GeoDataFrame, *, crs: str, iou_threshold: float = 0.5,
-             edge_policy: str = "exclude", reference_status: str = "independent_holdout") -> EvaluationResult:
+             edge_policy: str = "exclude", reference_status: str = "independent_holdout",
+             size_bins=None) -> EvaluationResult:
     """Evaluate independently labeled objects, never model-generated pseudo-labels.
 
     This API cannot prove label independence; the caller must establish provenance.
     CLI users must explicitly acknowledge an independent, completely labeled AOI, or
     declare the reference an existing inventory so the report records agreement only.
     Empty dataframes are valid; malformed rows are errors. Undefined ratios are null.
+    size_bins, edges in square metres such as [20, 50, 100], adds per-size-class metrics.
     """
+    edges = size_bin_edges(size_bins) if size_bins is not None else None
     if not 0 < iou_threshold <= 1 or edge_policy not in {"exclude", "clip"}:
         raise ValueError("IoU must be in (0, 1] and edge policy must be exclude or clip")
     if reference_status not in REFERENCE_REQUIREMENTS:
@@ -226,6 +297,10 @@ def evaluate(predictions: gpd.GeoDataFrame, reference: gpd.GeoDataFrame,
                            "boundary_hausdorff_m": distance})
     tp = len(matches)
     fp, fn = len(pred) - tp, len(ref) - tp
+    if edges is not None:
+        labels = size_class_labels(edges)
+        for frame in (pred, ref):
+            frame["size_class"] = [size_class(geometry.area, edges, labels) for geometry in frame.geometry]
     report = {
         "schema_version": 1,
         "fingerprint_method": FINGERPRINT_METHOD,
@@ -233,6 +308,8 @@ def evaluate(predictions: gpd.GeoDataFrame, reference: gpd.GeoDataFrame,
         "predictions_fingerprint": geometry_fingerprint(predictions),
         "reference_fingerprint": geometry_fingerprint(reference),
         "reference_order_fingerprint": row_order_fingerprint(reference),
+        # Lets nbf agree link prediction_id values back to rows of the same predictions file.
+        "predictions_order_fingerprint": row_order_fingerprint(predictions),
         "aoi_fingerprint": geometry_fingerprint(aoi),
         "fingerprint_definition": "SHA-256 of source CRS and sorted normalized WKB geometries, including duplicate features. Independent of row order, ring start/direction, and multipart order; exact coordinates retained. Attributes excluded. This is input identity, not proof of annotation independence. reference_order_fingerprint hashes the same geometries in row order, so reference_id values keep pointing at the same buildings.",
         "reference_status": reference_status,
@@ -267,8 +344,21 @@ def evaluate(predictions: gpd.GeoDataFrame, reference: gpd.GeoDataFrame,
         },
         # Row positions in the reference source; matches[].reference_id uses the same numbering.
         "evaluated_reference_ids": [int(value) for value in ref.eval_id],
+        # Row positions in the predictions source; matches[].prediction_id uses the same numbering.
+        "evaluated_prediction_ids": [int(value) for value in pred.eval_id],
+        "size_bins_m2": edges,
         "matches": match_rows,
     }
+    if edges is not None:
+        classes, thresholds = size_metrics([g.area for g in ref.geometry], ref.match_id >= 0,
+                                           [g.area for g in pred.geometry], pred.match_id >= 0, edges)
+        report.update({
+            "size_class_definition": "Each object is classed by its own area in the metric CRS, after AOI clipping. Recall in a class is over its reference objects and precision over its predictions; matching is the global one-to-one matching, not redone per class, so a matched pair may span two classes. size_thresholds give the same metrics for objects at or above each edge.",
+            "size_classes": classes,
+            "size_thresholds": thresholds,
+            # Aligned with evaluated_reference_ids.
+            "evaluated_reference_size_classes": list(ref.size_class),
+        })
     return EvaluationResult(report, {
         "matched_predictions": pred.loc[pred.match_id >= 0].copy(),
         "matched_reference": ref.loc[ref.match_id >= 0].copy(),
@@ -291,6 +381,8 @@ def main(argv=None):
     parser.add_argument("--output-gpkg", help="optional matched, unmatched, and AOI-excluded objects")
     parser.add_argument("--iou-threshold", type=float, default=0.5)
     parser.add_argument("--edge-policy", choices=["exclude", "clip"], default="exclude")
+    parser.add_argument("--size-bins-m2", type=float, nargs="+", metavar="AREA",
+                        help="also report metrics by building size, e.g. 20 50 100 for <20, 20-50, 50-100 and >=100 m2")
     status = parser.add_mutually_exclusive_group(required=True)
     status.add_argument("--independent-holdout", action="store_true",
                         help="acknowledge independent annotations and complete labels within AOI, not pseudo-labels")
@@ -311,7 +403,8 @@ def main(argv=None):
     for filename, layer in ((args.predictions, args.predictions_layer), (args.reference, args.reference_layer), (args.aoi, args.aoi_layer)):
         frames.append(gpd.read_file(filename, layer=layer) if layer else gpd.read_file(filename))
     result = evaluate(*frames, crs=args.metric_crs, iou_threshold=args.iou_threshold, edge_policy=args.edge_policy,
-                      reference_status="agreement_only" if args.agreement_only else "independent_holdout")
+                      reference_status="agreement_only" if args.agreement_only else "independent_holdout",
+                      size_bins=args.size_bins_m2)
     result.report["sources"] = {role: {"path": str(path), "layer": layer} for role, path, layer in
                                 zip(("predictions", "reference", "aoi"), sources,
                                     (args.predictions_layer, args.reference_layer, args.aoi_layer))}
