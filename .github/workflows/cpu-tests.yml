@@ -69,6 +69,7 @@ jobs:
           nbf clean --input outputs/ci_esri/raw.gpkg --output outputs/ci_esri/cleaned.gpkg --metric-crs EPSG:32614
           nbf evaluate --predictions outputs/ci_esri/cleaned.gpkg --predictions-layer cleaned --reference data/ci_demo/reference.gpkg --aoi data/ci_demo/aoi.geojson --metric-crs EPSG:32614 --output-json outputs/ci_esri/evaluation.json --independent-holdout --size-bins-m2 20 50 100
           nbf compare --reports outputs/ci_metrics.json outputs/ci_imported_metrics.json outputs/ci_esri/evaluation.json --labels cleaned imported esri --output outputs/ci_comparison.csv --per-building outputs/ci_per_building.gpkg --by-size outputs/ci_by_size.csv
+          nbf review-check --original data/ci_demo/reference.gpkg --reviewed outputs/ci_imported.gpkg --aoi data/ci_demo/aoi.geojson --metric-crs EPSG:32614 --output-json outputs/ci_review.json --output-gpkg outputs/ci_review.gpkg
           nbf agree --predictions outputs/ci_cleaned.gpkg outputs/ci_esri/cleaned.gpkg --layers cleaned cleaned --labels cleaned esri --reports outputs/ci_metrics.json outputs/ci_esri/evaluation.json --aoi data/ci_demo/aoi.geojson --metric-crs EPSG:32614 --output-json outputs/ci_agree.json --output-gpkg outputs/ci_agree.gpkg
           nbf esri-chunks plan --manifest data/ci_tiles/manifest.json --output data/ci_chunks --core 256 --overlap 32
           nbf esri-chunks run --chunks data/ci_chunks --gdb outputs/ci_chunks.gdb --done outputs/ci_done --model usa_building_footprints.dlpk

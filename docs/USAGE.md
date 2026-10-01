@@ -167,6 +167,18 @@ The comparator checks holdout geometry fingerprints and evaluation settings, inc
 
 When the only reference available is an existing inventory that may be outdated, such as building outlines collected years before the imagery, pass `--agreement-only` instead of `--independent-holdout`. The report then records `reference_status: agreement_only`: precision, recall and F1 measure agreement with that inventory, not accuracy, because an unmatched prediction may be a real building the inventory lacks. `nbf compare` never mixes agreement-only reports with independent-holdout reports, and shows the status in its CSV.
 
+### Review an existing inventory into an independent reference
+
+An outdated inventory becomes an independent reference only when a person checks every outline in the AOI against the imagery: adds new buildings, removes demolished ones and corrects changed ones. Do this in QGIS or ArcGIS Pro on a copy of the inventory. `nbf agree` can show where to look first (its `candidate_new` layer), but every outline must still be judged against the imagery, never copied from a model. Then check what the review changed:
+
+```bash
+nbf review-check --original data/reference/lewisville_2015.gpkg --reviewed data/reference/test_area_reviewed.gpkg --aoi data/reference/test_area_aoi.gpkg --metric-crs EPSG:26914 --reviewer "Your Name" --imagery-date 2026-05 --label-convention "roof outline; every structure of 4 m2 and up" --output-json outputs/accuracy/review_check.json --output-gpkg outputs/accuracy/review_check.gpkg
+```
+
+It pairs original and reviewed outlines one to one inside the AOI and counts them as `unchanged` (IoU ≥ 0.95), `modified`, `added` or `removed`, with a GeoPackage layer for each. It flags outlines `nbf evaluate` would refuse (null, invalid or non-polygon) in a `problems` layer, and reviewed outlines that overlap each other in an `overlaps` layer to look at again. `ready_for_evaluation` is true once there are no problems. The JSON records the reviewer, imagery date, label convention and a `reviewed_fingerprint` equal to the `reference_fingerprint` of every evaluation report made from that file, so results can be traced back to the review. It never edits labels.
+
+[`configs/accuracy.example.json`](../configs/accuracy.example.json) runs the whole accuracy check for the Lewisville test area: the review check, `nbf evaluate --independent-holdout --size-bins-m2 20 50 100` for each method's frozen city-wide output, and `nbf compare --by-size --per-building`. Copy it to `configs/accuracy.local.json`, fix the paths and reviewer, and run `python scripts/run_experiment.py configs/accuracy.local.json --execute`.
+
 ### Compare Esri with other models
 
 Run Esri's model in ArcGIS Pro as described in [OPTIONAL_METHODS.md](OPTIONAL_METHODS.md#esri-building-footprint-extraction-usa-baseline), then give its output the same treatment as SAM 3's:
