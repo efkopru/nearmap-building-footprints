@@ -133,6 +133,14 @@ nbf clean --input outputs/text_pilot01/raw --output outputs/text_pilot01/cleaned
 
 Cleanup removes duplicates using IoU/containment thresholds. Where copies overlap, it keeps a complete detection before one flagged `edge_touch` or `nodata_touch`, then the higher score: along a tile seam, the copy cut by one tile's edge can outscore the whole building seen by the neighboring tile. `--duplicate-priority score` ranks by score alone. Cleanup does not union adjacent roofs or promise to reconstruct every clipped building; a building cut in every tile that sees it stays in pieces. Review tile-edge features and conflicting overlaps in GIS. `removed_audit` records exclusions; inputs are retained.
 
+A building longer than a tile is cut in every tile that sees it. To join its pieces, pass the inference run's tile manifest:
+
+```bash
+nbf clean --input outputs/text_pilot01/raw --output outputs/text_pilot01/cleaned_seams.gpkg --metric-crs EPSG:32614 --seam-merge-manifest data/prepared/pilot01/manifest.json
+```
+
+Seam merging runs before duplicate suppression and is off by default. Two `edge_touch` pieces from different tiles merge only when each is cut at its own tile's edge where that edge lies inside the other tile, and, inside the strip both tiles saw, the two pieces agree at an IoU of at least `--seam-merge-iou` (default 0.5). Neighbors that only touch, or overlap without agreeing, stay separate, and a complete copy of a building is still left to duplicate suppression. The first piece keeps the union, with `seam_merged` in its `cleanup_flags`, the highest score, and `merged_cleanup_ids` listing every piece; the others go to `removed_audit` as `seam_merged`. `edge_touch` on a merged outline says whether it still reaches the outer edge of the tiles it was merged from. A union that is not one valid polygon is not merged, and its pieces are flagged `seam_merge_rejected`. Seam merging needs the `tile_id` and `edge_touch` fields `nbf infer` writes, so it does not apply to imported vectors.
+
 Regularization is **off by default**. To test it, add `--regularize --max-displacement-m 0.3 --max-area-change 0.05` and review rejected/accepted changes. Curves and unusual roof shapes should not be forced into rectangles. With regularization on, the limits apply to the total change from the repaired raw polygon. If regularizing a simplified polygon would exceed them, the simplification alone is kept when it fits (`combined_change_rejected`); otherwise both are undone (`simplify_reverted`). Each polygon's `cleanup_flags` lists what was applied.
 
 The thresholds above are pilot values. Measure their effects on validation data and freeze them before final test evaluation.
@@ -147,13 +155,15 @@ nbf evaluate --predictions outputs/text_pilot01/cleaned.gpkg --predictions-layer
 
 Evaluation uses one-to-one matching, maximum match count above the IoU threshold, then IoU as the tie-break. It reports precision/recall/F1, matched overlap, area errors, and explicitly defined boundary-distance measures. Default AOI policy excludes polygons crossing the AOI boundary; `--edge-policy clip` is an explicit alternative. Inspect matched, unmatched, and excluded layers. Missing metrics for empty denominators are JSON null, not misleading zeros. The report also fingerprints the predictions and records each input's path and layer, so a result can be traced back to the file that produced it.
 
+Add `--size-bins-m2 20 50 100` to score by building size as well: classes `<20`, `20-50`, `50-100` and `>=100` m², and the same metrics for everything at or above each edge (`size_thresholds`, e.g. F1 for main buildings of 20 m² and up). Each object is classed by its own area in the metric CRS, so recall in a class is over its reference buildings and precision over its predictions. Matching is the one global matching, not redone per class, so a matched pair can span two classes. The match layers gain a `size_class` field.
+
 Aggregate method reports only after evaluating the same reference and AOI:
 
 ```bash
 nbf compare --reports outputs/text_pilot01/evaluation.json outputs/esri_pilot01/evaluation.json --output outputs/comparison.csv
 ```
 
-The comparator checks holdout geometry fingerprints and evaluation settings before writing the table. It cannot establish label independence or matching capture dates; record those decisions in the experiment metadata.
+The comparator checks holdout geometry fingerprints and evaluation settings, including the size bins, before writing the table. With `--by-size outputs/comparison_by_size.csv` it also writes one row per method and size class, then per at-or-above edge; the reports must all have been made with the same `--size-bins-m2`. It cannot establish label independence or matching capture dates; record those decisions in the experiment metadata.
 
 When the only reference available is an existing inventory that may be outdated, such as building outlines collected years before the imagery, pass `--agreement-only` instead of `--independent-holdout`. The report then records `reference_status: agreement_only`: precision, recall and F1 measure agreement with that inventory, not accuracy, because an unmatched prediction may be a real building the inventory lacks. `nbf compare` never mixes agreement-only reports with independent-holdout reports, and shows the status in its CSV.
 
@@ -170,7 +180,19 @@ nbf compare --reports outputs/text_pilot01/evaluation.json outputs/esri_pilot01/
 
 Use the same cleanup and evaluation settings as for the other methods. `--per-building` writes a `buildings` layer with one row per evaluated reference building. Each row has the building's original attributes and outline, `<label>_match_iou` and `<label>_match_id` for each method (NaN and -1 when missed), `found_by`, and an `outcome` such as `found by both`, `only esri`, or `missed by both`. Style `outcome` in QGIS or ArcGIS Pro to see where the methods disagree on the same labeled buildings. Each method's false detections are in the `unmatched_predictions` layer of its own evaluation GeoPackage.
 
+When the reports were made with `--size-bins-m2`, each building also has its `size_class`.
+
 Reports refer to reference buildings by row position, so the comparison first checks that the reference file still holds the same rows in the same order. It reads the reference file recorded in the reports; pass `--reference` if the file has moved. The demo includes `esri_format_predictions.gdb`, synthetic predictions in Esri's output layout, so the whole sequence can be tried without ArcGIS.
+
+### Compare two models without labels
+
+Where the reference is outdated, the two models' agreement with each other is the most useful signal. `nbf agree` matches one method's outlines to the other's with the same one-to-one matching as `nbf evaluate`:
+
+```bash
+nbf agree --predictions outputs/text_pilot01/cleaned.gpkg outputs/esri_pilot01/cleaned.gpkg --layers cleaned cleaned --labels sam3_text esri --reports outputs/text_pilot01/evaluation.json outputs/esri_pilot01/evaluation.json --aoi data/reference/test_aoi.gpkg --metric-crs EPSG:32614 --output-json outputs/agreement.json --output-gpkg outputs/agreement.gpkg
+```
+
+The JSON reports the number of pairs, the share of each method's outlines with a partner, and the pairs' IoU. The GeoPackage has a `both` layer (the first method's outlines with their partner's ID and the pair's IoU) and an `only_<label>` layer per method. `--reports` is optional; pass `-` for a method without one. Each report must come from the same predictions file in the same row order, which is checked. With at least one, `<label>_reference_match` is filled in and a `candidate_new` layer lists pairs that no supplied report matched to its reference: outlines two independent methods agree on but the reference lacks, most likely buildings that are new or changed since it was made. Review them before using any as labels. An outline the evaluation left out, for example one crossing its AOI edge, is never a candidate. Agreement is not accuracy: two models can make the same mistake.
 
 **A valid polygon is not proof of an accurate ground footprint.** Roof overhang and displacement require a separate target/geometry decision. Confidence scores are not measured accuracy.
 
