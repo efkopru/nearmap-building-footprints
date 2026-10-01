@@ -23,6 +23,21 @@ from .evaluation import (_summary, _validate, _within_aoi, geometry_fingerprint,
 from .postprocess import metric_crs, write_layers
 
 
+# Two reports can only be combined into one list of candidates if they judged the same reference the same way.
+SHARED_REPORT_FIELDS = ("reference_fingerprint", "aoi_fingerprint", "metric_crs", "iou_threshold", "edge_policy")
+
+
+def _check_reports_agree(reports, labels):
+    first, second = reports
+    mismatches = [field for field in SHARED_REPORT_FIELDS if first.get(field) != second.get(field)]
+    # Reports written before --agreement-only existed could only be independent holdouts.
+    if first.get("reference_status", "independent_holdout") != second.get("reference_status", "independent_holdout"):
+        mismatches.append("reference_status")
+    if mismatches:
+        raise ValueError(f"The {labels[0]} and {labels[1]} reports were not scored against the same reference "
+                         f"and settings ({', '.join(mismatches)}); re-run nbf evaluate for both with one reference and AOI")
+
+
 def _reference_matches(report, frame, label):
     """Which rows of frame the report evaluated, and which of those matched the reference."""
     if not isinstance(report, dict):
@@ -68,6 +83,8 @@ def agree(first: gpd.GeoDataFrame, second: gpd.GeoDataFrame, aoi: gpd.GeoDataFra
     region = shapely.union_all(area.geometry.to_numpy())
     selected = [_within_aoi(frame, region, edge_policy)[0] for frame in frames]
     matches = maximum_cardinality_matches(list(selected[0].geometry), list(selected[1].geometry), iou_threshold)
+    if all(report is not None for report in reports):
+        _check_reports_agree(reports, labels)
     reference = [_reference_matches(report, source, label) if report is not None else None
                  for report, source, label in zip(reports, sources, labels)]
     for index, (frame, other) in enumerate(zip(selected, reversed(prefixes))):

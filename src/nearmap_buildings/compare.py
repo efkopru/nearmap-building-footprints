@@ -33,7 +33,7 @@ REFERENCE_STATUSES = ("independent_holdout", "agreement_only")
 def _reference_status(report):
     # Reports written before --agreement-only existed could only be independent holdouts.
     return report.get("reference_status", "independent_holdout")
-PER_BUILDING_FIELDS = ("eval_id", "size_class", "found_by", "found_count", "outcome")
+PER_BUILDING_FIELDS = ("eval_id", "found_by", "found_count", "outcome")
 SIZE_CSV_FIELDS = ("label", "kind", "size_class", "min_m2", "max_m2", "reference", "matched_reference",
                    "predictions", "matched_predictions", "precision", "recall", "f1")
 
@@ -99,11 +99,12 @@ def _load_reports(paths):
     return reports
 
 
-def compare_reports(paths, labels=None):
+def compare_reports(paths, labels=None, reports=None):
     """Return comparable CSV rows; refuse old or mismatched holdout reports.
 
     This does not pool metrics across runs. Every row remains a separate method or
     experiment on identical reference/AOI geometry and compatible evaluator settings.
+    reports, when given, are the already loaded reports for paths.
     """
     paths = [Path(path).resolve() for path in paths]
     if not paths:
@@ -119,7 +120,8 @@ def compare_reports(paths, labels=None):
     labels = [label.strip() for label in labels]
     if len(set(labels)) != len(labels):
         raise ValueError("report labels are ambiguous; supply unique --labels")
-    reports = _load_reports(paths)
+    if reports is None:
+        reports = _load_reports(paths)
     rows = []
     for path, label, report in zip(paths, labels, reports):
         try:
@@ -152,19 +154,21 @@ def compare_reports(paths, labels=None):
     return rows
 
 
-def size_rows(paths, labels):
+def size_rows(paths, labels, reports=None):
     """Rows of per-size-class metrics, one per report and class, then per at-or-above edge."""
     paths = [Path(path).resolve() for path in paths]
-    reports = _load_reports(paths)
+    if reports is None:
+        reports = _load_reports(paths)
     if reports[0].get("size_bins_m2") is None:
         raise ValueError("The reports have no size classes; re-run nbf evaluate with --size-bins-m2")
     rows = []
     for path, label, report in zip(paths, labels, reports):
         try:
-            entries = [("class", entry["size_class"], entry) for entry in report["size_classes"]]
-            entries += [("at_least", f">={entry['min_m2']:g}", entry) for entry in report["size_thresholds"]]
-            for kind, name, entry in entries:
-                row = {"label": label, "kind": kind, "size_class": name, "min_m2": entry["min_m2"],
+            # Labels come from the report, so they always match its per-building size_class values.
+            entries = [("class", entry) for entry in report["size_classes"]]
+            entries += [("at_least", entry) for entry in report["size_thresholds"]]
+            for kind, entry in entries:
+                row = {"label": label, "kind": kind, "size_class": entry["size_class"], "min_m2": entry["min_m2"],
                        "max_m2": entry.get("max_m2"),
                        **{field: entry[field] for field in SIZE_CSV_FIELDS[5:]}}
                 for field in ("reference", "matched_reference", "predictions", "matched_predictions"):
@@ -194,7 +198,7 @@ def _outcome(found, labels):
     return f"found by {len(found)} of {len(labels)}"
 
 
-def per_building(paths, labels, reference=None, reference_layer=None):
+def per_building(paths, labels, reference=None, reference_layer=None, reports=None):
     """One row per evaluated reference building, recording which methods matched it.
 
     Reports identify reference buildings by row position, so the reference file must
@@ -207,7 +211,8 @@ def per_building(paths, labels, reference=None, reference_layer=None):
     from .evaluation import row_order_fingerprint
 
     paths = [Path(path).resolve() for path in paths]
-    reports = _load_reports(paths)
+    if reports is None:
+        reports = _load_reports(paths)
     for path, report in zip(paths, reports):
         if (not FINGERPRINT_PATTERN.fullmatch(str(report.get("reference_order_fingerprint", "")))
                 or not isinstance(report.get("evaluated_reference_ids"), list)):
@@ -232,17 +237,19 @@ def per_building(paths, labels, reference=None, reference_layer=None):
     prefixes = [_field_prefix(label) for label in labels]
     if len(set(prefixes)) != len(prefixes):
         raise ValueError(f"Labels {labels} do not give distinct field names; choose clearly different --labels")
-    generated = [*PER_BUILDING_FIELDS, *(f"{prefix}_{field}" for prefix in prefixes for field in ("match_id", "match_iou"))]
+    classes = reports[0].get("evaluated_reference_size_classes")
+    if classes is not None and len(classes) != len(ids):
+        raise ValueError("evaluated_reference_size_classes must match evaluated_reference_ids")
+    # size_class is added only for reports made with size bins, so it never clashes otherwise.
+    generated = [*PER_BUILDING_FIELDS, *(["size_class"] if classes is not None else []),
+                 *(f"{prefix}_{field}" for prefix in prefixes for field in ("match_id", "match_iou"))]
     clashes = sorted(set(generated) & set(frame.columns))
     if clashes:
         raise ValueError(f"Reference fields clash with comparison fields: {clashes}")
     buildings = frame.iloc[ids].reset_index(drop=True)
     buildings["eval_id"] = ids
-    classes = reports[0].get("evaluated_reference_size_classes")
-    if classes is not None and len(classes) != len(ids):
-        raise ValueError("evaluated_reference_size_classes must match evaluated_reference_ids")
-    # Empty when the reports were made without --size-bins-m2.
-    buildings["size_class"] = classes if classes is not None else [""] * len(ids)
+    if classes is not None:
+        buildings["size_class"] = classes
     position = {value: index for index, value in enumerate(ids)}
     found = [[] for _ in ids]
     for path, label, prefix, report in zip(paths, labels, prefixes, reports):
@@ -285,14 +292,17 @@ def main(argv=None):
     if args.by_size is not None and (args.by_size.suffix.lower() != ".csv" or args.by_size.exists()
                                      or args.by_size.resolve() == args.output.resolve()):
         parser.error("--by-size must be a new .csv file, different from --output")
-    rows = compare_reports(args.reports, args.labels)
+    reports = _load_reports([path.resolve() for path in args.reports])
+    rows = compare_reports(args.reports, args.labels, reports)
     labels = [row["label"] for row in rows]
     # Build every output in memory before writing anything, so a failure leaves no partial output.
-    by_size = size_rows(args.reports, labels) if args.by_size is not None else None
+    by_size = size_rows(args.reports, labels, reports) if args.by_size is not None else None
     buildings = None
     if args.per_building is not None:
-        buildings = per_building(args.reports, labels, args.reference, args.reference_layer)
-    args.output.parent.mkdir(parents=True, exist_ok=True)
+        buildings = per_building(args.reports, labels, args.reference, args.reference_layer, reports)
+    for path in (args.output, args.by_size, args.per_building):
+        if path is not None:
+            path.parent.mkdir(parents=True, exist_ok=True)
     # Exclusive create closes the exists-check race and never overwrites a report.
     with args.output.open("x", newline="", encoding="utf-8") as output:
         writer = csv.DictWriter(output, fieldnames=CSV_FIELDS)
