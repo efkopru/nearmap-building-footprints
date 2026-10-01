@@ -7,6 +7,7 @@ and ArcPy. --chunks runs part of a city-wide plan from nbf esri-chunks.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import os
@@ -78,6 +79,16 @@ def run_esri(raster, model, output, *, threshold=0.5, batch_size=4, padding=128,
     return plan
 
 
+def plan_digest(chunks):
+    """SHA-256 of a plan's chunks.json; done-markers record it so another plan's markers are never trusted."""
+    return hashlib.sha256((Path(chunks) / "chunks.json").read_bytes()).hexdigest()
+
+
+def check_marker(marker, digest):
+    if json.loads(marker.read_text(encoding="utf-8")).get("plan_sha256") != digest:
+        raise ValueError(f"{marker} belongs to another chunk plan; use a new --done folder and --gdb for this plan")
+
+
 def run_chunk_batch(chunks, gdb, done, model, *, budget, **options):
     """Run up to budget unfinished chunks of a plan, each into its own feature class.
 
@@ -97,12 +108,14 @@ def run_chunk_batch(chunks, gdb, done, model, *, budget, **options):
         raise ValueError("chunks.json was not written by nbf esri-chunks plan")
     if any(not CHUNK_NAME.fullmatch(chunk["name"]) for chunk in plan["chunks"]):
         raise ValueError("chunk names must be letters, digits and underscores")
+    digest = plan_digest(chunks)
     done.mkdir(parents=True, exist_ok=True)
     if not arcpy.Exists(str(gdb)):
         arcpy.management.CreateFileGDB(str(gdb.parent), gdb.name)
     for chunk in plan["chunks"]:
         marker = done / f"{chunk['name']}.json"
         if marker.exists():
+            check_marker(marker, digest)
             continue
         if budget == 0:
             return "budget"
@@ -113,7 +126,7 @@ def run_chunk_batch(chunks, gdb, done, model, *, budget, **options):
         start = time.perf_counter()
         run_esri(chunks / f"{chunk['name']}.vrt", model, output, execute=True, **options)
         result = {"chunk": chunk["name"], "seconds": round(time.perf_counter() - start, 1),
-                  "features": int(arcpy.management.GetCount(str(output))[0])}
+                  "features": int(arcpy.management.GetCount(str(output))[0]), "plan_sha256": digest}
         temporary = marker.with_suffix(".tmp")
         temporary.write_text(json.dumps(result), encoding="utf-8")
         os.replace(temporary, marker)

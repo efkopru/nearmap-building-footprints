@@ -214,3 +214,21 @@ def test_invalid_size_bins_are_refused(bins):
     reference = frame([box(0, 0, 4, 5)])
     with pytest.raises(ValueError, match="size bins"):
         evaluate(reference, reference, aoi(), crs=CRS, size_bins=bins)
+
+
+def test_a_pair_spanning_two_classes_leaves_class_f1_undefined_not_zero():
+    # A 19 m2 building matched by a 21 m2 outline: perfect overall, but each class has one side only.
+    report = evaluate(frame([box(0, 0, 4.2, 5)]), frame([box(0, 0, 3.8, 5)]), aoi(), crs=CRS,
+                      size_bins=[20]).report
+    assert report["f1"] == 1.0
+    classes = {entry["size_class"]: entry for entry in report["size_classes"]}
+    assert (classes["<20"]["recall"], classes["<20"]["precision"], classes["<20"]["f1"]) == (1.0, None, None)
+    assert (classes[">=20"]["recall"], classes[">=20"]["precision"], classes[">=20"]["f1"]) == (None, 1.0, None)
+    assert report["size_thresholds"][0]["size_class"] == ">=20"
+
+
+def test_an_input_size_class_field_is_only_reserved_when_size_bins_are_used():
+    reference = frame([box(0, 0, 4, 5)], size_class=["house"])
+    assert evaluate(reference, reference, aoi(), crs=CRS).report["f1"] == 1.0
+    with pytest.raises(ValueError, match="reserved"):
+        evaluate(reference, reference, aoi(), crs=CRS, size_bins=[20])

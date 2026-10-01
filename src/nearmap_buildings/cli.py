@@ -1,6 +1,7 @@
 """Thin command dispatcher; optional ArcPy/CUDA are never needed for --help."""
 import argparse
 import importlib
+import json
 import os
 import sys
 
@@ -24,8 +25,10 @@ COMMANDS = {
 USER_ERRORS = (ValueError, OSError)
 GIS_ERROR_PACKAGES = ("pyogrio", "pyproj", "rasterio")
 GIS_VARIABLES = ("PROJ_LIB", "PROJ_DATA", "GDAL_DATA")
-# What main removed, so a command that starts ArcGIS Pro's Python can give them back.
-REMOVED_GIS_VARIABLES = {}
+# What main removed, as JSON, so a command that starts ArcGIS Pro's Python can give it back.
+# It lives in the environment, not in this module: `python -m nearmap_buildings.cli` runs this
+# file as __main__, so another module importing .cli would get a second, empty copy.
+REMOVED_GIS_ENVIRONMENT = "NBF_REMOVED_GIS_ENVIRONMENT"
 
 def is_user_error(error):
     return isinstance(error, USER_ERRORS) or type(error).__module__.split(".")[0] in GIS_ERROR_PACKAGES
@@ -41,9 +44,10 @@ def main(argv=None):
     # Wheel-based GIS commands must not inherit a foreign PostGIS/ArcGIS database.
     # This is process-local. ArcPy deliberately keeps its own environment intact.
     if command != "esri":
-        for variable in GIS_VARIABLES:
-            if variable in os.environ:
-                REMOVED_GIS_VARIABLES[variable] = os.environ.pop(variable)
+        removed = {variable: os.environ.pop(variable) for variable in GIS_VARIABLES if variable in os.environ}
+        if removed:
+            os.environ[REMOVED_GIS_ENVIRONMENT] = json.dumps(
+                {**json.loads(os.environ.get(REMOVED_GIS_ENVIRONMENT, "{}")), **removed})
     module, function = COMMANDS[command]
     try:
         getattr(importlib.import_module(f"nearmap_buildings.{module}"), function)(rest)

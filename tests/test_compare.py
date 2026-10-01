@@ -267,3 +267,19 @@ def test_per_building_records_each_reference_size_class(tmp_path):
     first = save(tmp_path, "a", sized_report())
     buildings = per_building([first], ["a"], reference_path)
     assert list(buildings.size_class) == ["<50", ">=50"]
+
+
+def test_by_size_outputs_go_into_new_folders(tmp_path):
+    first = save(tmp_path, "a", sized_report())
+    output, by_size = tmp_path / "out" / "comparison.csv", tmp_path / "sub" / "by_size.csv"
+    main(["--reports", str(first), "--output", str(output), "--by-size", str(by_size)])
+    assert output.exists() and by_size.exists()
+
+
+def test_per_building_without_size_bins_keeps_a_reference_size_class_field(tmp_path):
+    reference = frame([box(0, 0, 10, 10), box(20, 0, 30, 10)], size_class=["shed", "house"])
+    reference_path = tmp_path / "reference.gpkg"
+    reference.to_file(reference_path)
+    evaluation = evaluate(reference, reference, frame([box(-10, -10, 100, 100)]), crs=CRS).report
+    buildings = per_building([save(tmp_path, "a", evaluation)], ["a"], reference_path)
+    assert list(buildings.size_class) == ["shed", "house"]
