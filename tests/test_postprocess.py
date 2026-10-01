@@ -7,7 +7,7 @@ import shapely
 from shapely.geometry import LineString, MultiPolygon, Polygon, box
 
 from nearmap_buildings.postprocess import (
-    clean_polygons, conservative_regularize, main, metric_crs, read_polygon_inputs,
+    clean_polygons, conservative_regularize, main, manifest_tiles, metric_crs, read_polygon_inputs,
     write_layers,
 )
 
@@ -216,3 +216,87 @@ def test_explicit_json_geojson_is_still_accepted(tmp_path):
     loaded, files = read_polygon_inputs(path)
     assert files == [path]
     assert len(loaded) == 1
+
+
+def seam_tiles(*extents):
+    """Tiles of 1 m pixels; the ids are a, b, c... in the order given."""
+    return gpd.GeoDataFrame({"tile_id": [chr(97 + i) for i in range(len(extents))],
+                             "width": [int(e[2] - e[0]) for e in extents],
+                             "height": [int(e[3] - e[1]) for e in extents]},
+                            geometry=[box(*e) for e in extents], crs=CRS)
+
+
+TWO_TILES = ((0, 0, 100, 100), (80, 0, 180, 100))
+
+
+def test_seam_merge_joins_a_building_longer_than_the_overlap():
+    # One 100 m building seen in two pieces, each cut at its own tile's edge.
+    source = frame([box(50, 40, 100, 60), box(80, 40, 150, 60)], tile_id=["a", "b"],
+                   score=[0.6, 0.9], edge_touch=[True, True], nodata_touch=[False, False])
+    result = clean_polygons(source, crs=CRS, seam_tiles=seam_tiles(*TWO_TILES))
+    assert len(result.cleaned) == 1
+    kept = result.cleaned.iloc[0]
+    assert kept.geometry.equals(box(50, 40, 150, 60))
+    assert (kept.score, kept.edge_touch, kept.merged_cleanup_ids) == (0.9, False, "0;1")
+    assert "seam_merged" in kept.cleanup_flags
+    assert result.removed.removed_reason.tolist() == ["seam_merged"]
+    assert result.removed.kept_cleanup_id.tolist() == [0]
+
+
+def test_seam_merge_joins_four_pieces_at_a_tile_corner():
+    tiles = seam_tiles((0, 0, 100, 100), (80, 0, 180, 100), (0, 80, 100, 180), (80, 80, 180, 180))
+    pieces = [box(60, 60, 100, 100), box(80, 60, 120, 100), box(60, 80, 100, 120), box(80, 80, 120, 120)]
+    source = frame(pieces, tile_id=list("abcd"), score=[0.5] * 4, edge_touch=[True] * 4)
+    result = clean_polygons(source, crs=CRS, seam_tiles=tiles)
+    assert len(result.cleaned) == 1 and result.cleaned.geometry.iloc[0].equals(box(60, 60, 120, 120))
+    assert len(result.removed) == 3
+
+
+@pytest.mark.parametrize("second", [box(80, 60, 150, 80),   # neighbour touching along a wall
+                                    box(80, 50, 150, 70)])  # overlaps, but disagrees in the strip
+def test_seam_merge_keeps_different_buildings_apart(second):
+    source = frame([box(50, 40, 100, 60), second], tile_id=["a", "b"], edge_touch=[True, True])
+    result = clean_polygons(source, crs=CRS, seam_tiles=seam_tiles(*TWO_TILES))
+    assert len(result.cleaned) == 2 and "seam_merged" not in set(result.removed.removed_reason)
+
+
+def test_seam_merge_needs_pieces_cut_inside_the_other_tile():
+    # The second piece touches only its tile's far edge, which the first tile cannot see past.
+    source = frame([box(50, 40, 100, 60), box(85, 40, 180, 60)], tile_id=["a", "b"],
+                   edge_touch=[True, True])
+    result = clean_polygons(source, crs=CRS, seam_tiles=seam_tiles(*TWO_TILES))
+    assert len(result.cleaned) == 2
+
+
+def test_seam_merge_leaves_complete_copies_to_duplicate_suppression():
+    source = frame([box(85, 40, 100, 60), box(85, 40, 95, 60)], tile_id=["a", "b"],
+                   score=[0.9, 0.5], edge_touch=[True, False])
+    result = clean_polygons(source, crs=CRS, seam_tiles=seam_tiles(*TWO_TILES))
+    assert result.removed.removed_reason.tolist() == ["duplicate_overlap"]
+
+
+def test_seam_merge_requires_inference_fields_and_known_tiles():
+    tiles = seam_tiles(*TWO_TILES)
+    with pytest.raises(ValueError, match="tile_id"):
+        clean_polygons(frame([box(0, 0, 5, 5)], edge_touch=[True]), crs=CRS, seam_tiles=tiles)
+    with pytest.raises(ValueError, match="missing from the manifest"):
+        clean_polygons(frame([box(0, 0, 5, 5)], tile_id=["z"], edge_touch=[True]), crs=CRS, seam_tiles=tiles)
+    with pytest.raises(ValueError, match="seam merge IoU"):
+        clean_polygons(frame([box(0, 0, 5, 5)]), crs=CRS, seam_tiles=tiles, seam_merge_iou=0)
+
+
+def test_clean_command_merges_seams_from_a_manifest(tmp_path):
+    import json
+
+    tiles = [{"id": tile_id, "crs": CRS, "width": 100, "height": 100, "bounds": list(extent)}
+             for tile_id, extent in zip("ab", TWO_TILES)]
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text(json.dumps({"schema_version": 1, "status": "complete", "tiles": tiles}), encoding="utf-8")
+    assert list(manifest_tiles(manifest).tile_id) == ["a", "b"]
+    raw = tmp_path / "raw.gpkg"
+    frame([box(50, 40, 100, 60), box(80, 40, 150, 60)], tile_id=["a", "b"], score=[0.6, 0.9],
+          edge_touch=[True, True], nodata_touch=[False, False]).to_file(raw)
+    output = tmp_path / "cleaned.gpkg"
+    main(["--input", str(raw), "--output", str(output), "--metric-crs", CRS, "--seam-merge-manifest", str(manifest)])
+    cleaned = gpd.read_file(output, layer="cleaned")
+    assert len(cleaned) == 1 and cleaned.geometry.iloc[0].equals(box(50, 40, 150, 60))

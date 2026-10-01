@@ -2,9 +2,10 @@
 
 Deduplication keeps one of each set of overlapping instances: by default a complete
 detection (not cut by a tile edge or nodata) before a truncated one, then the higher
-score. It never dissolves neighbors. Orthogonalization is optional and only attempts
-already near-orthogonal simple rings. Geometry cleanup cannot turn a roof outline
-into a ground footprint.
+score. It never dissolves neighbors. Optional seam merging joins the pieces of a
+building longer than a tile, only where two cut pieces agree inside their tiles'
+overlap. Orthogonalization is optional and only attempts already near-orthogonal
+simple rings. Geometry cleanup cannot turn a roof outline into a ground footprint.
 """
 from __future__ import annotations
 
@@ -18,9 +19,13 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 from pyproj import CRS
+from scipy.sparse import coo_matrix
+from scipy.sparse.csgraph import connected_components
 import shapely
-from shapely.geometry import MultiPolygon, Polygon
+from shapely.geometry import MultiPolygon, Polygon, box
 from shapely.strtree import STRtree
+
+from .common import read_json
 
 
 DUPLICATE_PRIORITIES = ("complete", "score")
@@ -128,6 +133,15 @@ def _within_change_bounds(original, candidate, *, min_area, max_displacement, ma
         and candidate.boundary.buffer(max_displacement).covers(original.boundary))
 
 
+def _flag(value, column) -> bool:
+    """A raw-mask flag as a bool; missing counts as False."""
+    if pd.isna(value):
+        return False
+    if value not in (True, False):
+        raise ValueError(f"{column} must be boolean, not {value!r}")
+    return bool(value)
+
+
 def _truncated(data: gpd.GeoDataFrame) -> np.ndarray:
     """True where a raw mask reached a tile edge or nodata; missing flags count as complete."""
     truncated = np.zeros(len(data), dtype=bool)
@@ -135,12 +149,110 @@ def _truncated(data: gpd.GeoDataFrame) -> np.ndarray:
         if column not in data:
             continue
         for index, value in enumerate(data[column]):
-            if pd.isna(value):
-                continue
-            if value not in (True, False):
-                raise ValueError(f"{column} must be boolean, not {value!r}")
-            truncated[index] |= bool(value)
+            truncated[index] |= _flag(value, column)
     return truncated
+
+
+def manifest_tiles(path: str | Path) -> gpd.GeoDataFrame:
+    """Tile extents and pixel sizes from an nbf tile manifest, for seam merging."""
+    manifest = read_json(path)
+    if manifest.get("schema_version") != 1 or manifest.get("status") != "complete" or not manifest.get("tiles"):
+        raise ValueError("seam merging needs a completed schema_version=1 tile manifest")
+    tiles = manifest["tiles"]
+    if len({tile["crs"] for tile in tiles}) != 1:
+        raise ValueError("manifest tiles must share one CRS")
+    return gpd.GeoDataFrame({"tile_id": [tile["id"] for tile in tiles],
+                             "width": [tile["width"] for tile in tiles],
+                             "height": [tile["height"] for tile in tiles]},
+                            geometry=[box(*tile["bounds"]) for tile in tiles], crs=tiles[0]["crs"])
+
+
+def _cut_inside(geometry, extent, other, tolerance):
+    """Whether geometry reaches its own tile's edge where that edge lies inside the other tile."""
+    seam = extent.boundary.intersection(other)
+    return not seam.is_empty and geometry.distance(seam) <= tolerance
+
+
+def _seam_groups(data, candidates, tiles, seam_merge_iou):
+    """Groups of edge-cut pieces that continue each other across tile seams."""
+    for column in ("tile_id", "edge_touch"):
+        if column not in data:
+            raise ValueError(f"seam merging needs the {column} field written by nbf infer")
+    lookup = {tile_id: index for index, tile_id in enumerate(tiles.tile_id)}
+    edge = [index for index in candidates if _flag(data.at[index, "edge_touch"], "edge_touch")]
+    unknown = sorted({str(data.at[index, "tile_id"]) for index in edge} - set(lookup))
+    if unknown:
+        raise ValueError(f"predictions refer to tiles missing from the manifest, e.g. {unknown[0]}")
+    extents = list(tiles.geometry)
+    # Half a pixel, from each tile's perimeter in metres against its perimeter in pixels.
+    tolerance = [0.5 * extent.length / (2 * (width + height))
+                 for extent, width, height in zip(extents, tiles.width, tiles.height)]
+    geometries = [data.geometry.iloc[index] for index in edge]
+    tree = STRtree(geometries)
+    pairs = []
+    for position, index in enumerate(edge):
+        tile = lookup[data.at[index, "tile_id"]]
+        for other_position in tree.query(geometries[position], predicate="intersects"):
+            other_position = int(other_position)
+            if other_position <= position:
+                continue
+            other_tile = lookup[data.at[edge[other_position], "tile_id"]]
+            if other_tile == tile:
+                continue
+            overlap = extents[tile].intersection(extents[other_tile])
+            if overlap.area <= 0:
+                continue
+            first, second = geometries[position], geometries[other_position]
+            # Each piece must be cut where the other tile can still see the building.
+            if not (_cut_inside(first, extents[tile], extents[other_tile], tolerance[tile])
+                    and _cut_inside(second, extents[other_tile], extents[tile], tolerance[other_tile])):
+                continue
+            # Inside the overlap both tiles saw the same pixels, so pieces of one building agree there.
+            a, b = first.intersection(overlap), second.intersection(overlap)
+            shared = a.intersection(b).area
+            union = a.area + b.area - shared
+            if union > 0 and shared / union >= seam_merge_iou:
+                pairs.append((position, other_position))
+    if not pairs:
+        return [], extents, lookup, tolerance
+    graph = coo_matrix((np.ones(len(pairs)), ([a for a, _ in pairs], [b for _, b in pairs])),
+                       shape=(len(edge), len(edge))).tocsr()
+    _, labels = connected_components(graph, directed=False)
+    groups = {}
+    for position, label in enumerate(labels):
+        groups.setdefault(int(label), []).append(edge[position])
+    return [sorted(group) for group in groups.values() if len(group) > 1], extents, lookup, tolerance
+
+
+def _merge_seams(data, candidates, tiles, seam_merge_iou, scores):
+    """Merge each seam group into its first member; return the candidates that remain."""
+    groups, extents, lookup, tolerance = _seam_groups(data, candidates, tiles, seam_merge_iou)
+    merged_away = set()
+    for group in groups:
+        merged = polygon_parts(shapely.union_all([data.geometry.iloc[index] for index in group]))
+        if not isinstance(merged, Polygon) or not merged.is_valid:
+            for index in group:
+                data.at[index, "cleanup_flags"] = ";".join(filter(None, [data.at[index, "cleanup_flags"], "seam_merge_rejected"]))
+            continue
+        keep, others = group[0], group[1:]
+        member_tiles = [lookup[data.at[index, "tile_id"]] for index in group]
+        covered = shapely.union_all([extents[tile] for tile in member_tiles])
+        data.at[keep, data.geometry.name] = merged
+        data.at[keep, "area_m2"] = merged.area
+        data.at[keep, "merged_cleanup_ids"] = ";".join(str(int(data.at[index, "cleanup_id"])) for index in group)
+        # Still cut only if it reaches the outer edge of the tiles it was merged from.
+        data.at[keep, "edge_touch"] = bool(merged.distance(covered.boundary) <= max(tolerance[tile] for tile in member_tiles))
+        if "nodata_touch" in data:
+            data.at[keep, "nodata_touch"] = any(_flag(data.at[index, "nodata_touch"], "nodata_touch") for index in group)
+        if "score" in data:
+            best = max((float(scores.iloc[index]) for index in group), default=-np.inf)
+            data.at[keep, "score"] = best if np.isfinite(best) else data.at[keep, "score"]
+        data.at[keep, "cleanup_flags"] = ";".join(filter(None, [data.at[keep, "cleanup_flags"], "seam_merged"]))
+        for index in others:
+            data.at[index, "removed_reason"] = "seam_merged"
+            data.at[index, "kept_cleanup_id"] = keep
+        merged_away.update(others)
+    return [index for index in candidates if index not in merged_away]
 
 
 @dataclass
@@ -155,8 +267,16 @@ def clean_polygons(frame: gpd.GeoDataFrame, *, crs: str | CRS,
                    regularize: bool = False, max_displacement: float = 0.3,
                    max_area_change: float = 0.05,
                    angle_tolerance: float = 10.0,
-                   duplicate_priority: str = "complete") -> CleanupResult:
+                   duplicate_priority: str = "complete",
+                   seam_tiles: gpd.GeoDataFrame | None = None,
+                   seam_merge_iou: float = 0.5) -> CleanupResult:
     """Clean then prioritize duplicates, without merging adjacent instances.
+
+    seam_tiles (tile_id, width, height and tile extents, as manifest_tiles returns)
+    turns on seam merging before duplicate suppression: edge_touch pieces from two
+    tiles merge when each is cut at its own tile's edge inside the other tile and,
+    inside the two tiles' overlap, the pieces reach seam_merge_iou. The first piece
+    keeps the union and the highest score; the others are audited as seam_merged.
 
     A duplicate has positive intersection area and either IoU >= threshold or
     intersection/min(area1, area2) >= containment_threshold. With the default
@@ -174,9 +294,11 @@ def clean_polygons(frame: gpd.GeoDataFrame, *, crs: str | CRS,
         raise ValueError("areas/tolerances must be nonnegative and overlap thresholds in (0, 1]")
     if not all(math.isfinite(value) for value in (max_displacement, max_area_change, angle_tolerance)) or max_displacement < 0 or not 0 <= max_area_change <= 1 or not 0 < angle_tolerance < 45:
         raise ValueError("invalid regularization bounds")
+    if not math.isfinite(seam_merge_iou) or not 0 < seam_merge_iou <= 1:
+        raise ValueError("seam merge IoU must be in (0, 1]")
     data = frame.to_crs(target).copy().reset_index(drop=True)
     reserved = {"cleanup_id", "cleanup_flags", "raw_area_m2", "area_m2", "removed_reason",
-                "kept_cleanup_id", "duplicate_iou", "duplicate_containment"}
+                "kept_cleanup_id", "duplicate_iou", "duplicate_containment", "merged_cleanup_ids"}
     if reserved.intersection(data.columns):
         raise ValueError("input contains reserved cleanup columns; use raw predictions, not an earlier cleanup")
     data["cleanup_id"] = np.arange(len(data), dtype=np.int64)
@@ -210,10 +332,18 @@ def clean_polygons(frame: gpd.GeoDataFrame, *, crs: str | CRS,
             data.at[index, "removed_reason"] = "below_min_area"
         else:
             candidates.append(index)
-    geometries = [data.geometry.iloc[index] for index in candidates]
-    tree = STRtree(geometries)
     scores = pd.to_numeric(data["score"], errors="coerce") if "score" in data else pd.Series(np.nan, index=data.index)
     scores = scores.where(np.isfinite(scores), -np.inf)
+    if seam_tiles is not None:
+        if seam_tiles.crs is None:
+            raise ValueError("seam merging tiles need a CRS")
+        data["merged_cleanup_ids"] = ""
+        candidates = _merge_seams(data, candidates, seam_tiles.to_crs(target).reset_index(drop=True),
+                                  seam_merge_iou, scores)
+        scores = pd.to_numeric(data["score"], errors="coerce") if "score" in data else scores
+        scores = scores.where(np.isfinite(scores), -np.inf)
+    geometries = [data.geometry.iloc[index] for index in candidates]
+    tree = STRtree(geometries)
     # At a tile seam the copy cut by one tile's edge can outscore the whole
     # building seen by its neighbor, so completeness outranks score by default.
     truncated = _truncated(data) if duplicate_priority == "complete" else np.zeros(len(data), dtype=bool)
@@ -332,6 +462,10 @@ def main(argv=None):
     parser.add_argument("--duplicate-priority", choices=DUPLICATE_PRIORITIES, default="complete",
                         help="complete: keep detections not cut by a tile edge or nodata first, then higher score; "
                              "score: higher score only")
+    parser.add_argument("--seam-merge-manifest", type=Path,
+                        help="tile manifest of the inference run; merges pieces of buildings cut at tile seams")
+    parser.add_argument("--seam-merge-iou", type=float, default=0.5,
+                        help="how closely two pieces must agree inside their tiles' overlap to merge")
     parser.add_argument("--regularize", action="store_true", help="attempt a bounded near-orthogonal fit")
     parser.add_argument("--max-displacement-m", type=float, default=0.3)
     parser.add_argument("--max-area-change", type=float, default=0.05, help="relative area change, e.g. 0.05 = 5%%")
@@ -346,10 +480,13 @@ def main(argv=None):
                             simplify=args.simplify_m, iou_threshold=args.iou_threshold,
                             containment_threshold=args.containment_threshold, regularize=args.regularize,
                             max_displacement=args.max_displacement_m, max_area_change=args.max_area_change,
-                            angle_tolerance=args.angle_tolerance_deg, duplicate_priority=args.duplicate_priority)
+                            angle_tolerance=args.angle_tolerance_deg, duplicate_priority=args.duplicate_priority,
+                            seam_tiles=manifest_tiles(args.seam_merge_manifest) if args.seam_merge_manifest else None,
+                            seam_merge_iou=args.seam_merge_iou)
     write_layers(output, {"cleaned": result.cleaned, "removed_audit": result.removed}, overwrite=args.overwrite)
     print(json.dumps({"input_count": len(frame), "cleaned_count": len(result.cleaned),
                       "removed_count": len(result.removed), "duplicate_priority": args.duplicate_priority,
+                      "seam_merged": int((result.removed.removed_reason == "seam_merged").sum()),
                       "raw_inputs_preserved": True}))
 
 

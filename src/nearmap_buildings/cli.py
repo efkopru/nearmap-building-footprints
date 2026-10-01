@@ -11,8 +11,10 @@ COMMANDS = {
     "clean": ("postprocess", "main"),
     "evaluate": ("evaluation", "main"),
     "compare": ("compare", "main"),
+    "agree": ("agreement", "main"),
     "train": ("training", "main"),
     "esri": ("esri", "main"),
+    "esri-chunks": ("esri_chunks", "main"),
     "import-vectors": ("import_vectors", "main"),
     "doctor": ("doctor", "main"),
     "demo": ("demo", "main"),
@@ -21,6 +23,9 @@ COMMANDS = {
 # The GIS libraries raise their own types for unreadable files and unknown CRSs.
 USER_ERRORS = (ValueError, OSError)
 GIS_ERROR_PACKAGES = ("pyogrio", "pyproj", "rasterio")
+GIS_VARIABLES = ("PROJ_LIB", "PROJ_DATA", "GDAL_DATA")
+# What main removed, so a command that starts ArcGIS Pro's Python can give them back.
+REMOVED_GIS_VARIABLES = {}
 
 def is_user_error(error):
     return isinstance(error, USER_ERRORS) or type(error).__module__.split(".")[0] in GIS_ERROR_PACKAGES
@@ -36,8 +41,9 @@ def main(argv=None):
     # Wheel-based GIS commands must not inherit a foreign PostGIS/ArcGIS database.
     # This is process-local. ArcPy deliberately keeps its own environment intact.
     if command != "esri":
-        for variable in ("PROJ_LIB", "PROJ_DATA", "GDAL_DATA"):
-            os.environ.pop(variable, None)
+        for variable in GIS_VARIABLES:
+            if variable in os.environ:
+                REMOVED_GIS_VARIABLES[variable] = os.environ.pop(variable)
     module, function = COMMANDS[command]
     try:
         getattr(importlib.import_module(f"nearmap_buildings.{module}"), function)(rest)
