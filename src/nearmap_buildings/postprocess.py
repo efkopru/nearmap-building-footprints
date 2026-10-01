@@ -230,7 +230,10 @@ def _merge_seams(data, candidates, tiles, seam_merge_iou, scores):
     merged_away = set()
     for group in groups:
         merged = polygon_parts(shapely.union_all([data.geometry.iloc[index] for index in group]))
-        if not isinstance(merged, Polygon) or not merged.is_valid:
+        # One tile sees each building at most once. Two pieces from one tile are buildings the
+        # model separated, or duplicates for suppression to resolve, so never dissolve them.
+        one_per_tile = len({data.at[index, "tile_id"] for index in group}) == len(group)
+        if not one_per_tile or not isinstance(merged, Polygon) or not merged.is_valid:
             for index in group:
                 data.at[index, "cleanup_flags"] = ";".join(filter(None, [data.at[index, "cleanup_flags"], "seam_merge_rejected"]))
             continue
@@ -277,6 +280,7 @@ def clean_polygons(frame: gpd.GeoDataFrame, *, crs: str | CRS,
     tiles merge when each is cut at its own tile's edge inside the other tile and,
     inside the two tiles' overlap, the pieces reach seam_merge_iou. The first piece
     keeps the union and the highest score; the others are audited as seam_merged.
+    A group holding two pieces from one tile is not merged (seam_merge_rejected).
 
     A duplicate has positive intersection area and either IoU >= threshold or
     intersection/min(area1, area2) >= containment_threshold. With the default

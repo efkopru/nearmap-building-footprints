@@ -300,3 +300,22 @@ def test_clean_command_merges_seams_from_a_manifest(tmp_path):
     main(["--input", str(raw), "--output", str(output), "--metric-crs", CRS, "--seam-merge-manifest", str(manifest)])
     cleaned = gpd.read_file(output, layer="cleaned")
     assert len(cleaned) == 1 and cleaned.geometry.iloc[0].equals(box(50, 40, 150, 60))
+
+
+def test_seam_merge_never_joins_two_pieces_from_one_tile():
+    # Tile a separates two terraced houses; tile b sees them as one blob. Merging all three
+    # would dissolve neighbours the model told apart.
+    source = frame([box(60, 40, 100, 50), box(60, 50, 100, 60), box(80, 40, 140, 60)],
+                   tile_id=["a", "a", "b"], score=[0.8, 0.8, 0.7], edge_touch=[True, True, True])
+    result = clean_polygons(source, crs=CRS, seam_tiles=seam_tiles(*TWO_TILES))
+    assert "seam_merged" not in set(result.removed.removed_reason)
+    assert all("seam_merge_rejected" in flags for flags in result.cleaned.cleanup_flags)
+    assert not any(geometry.equals(box(60, 40, 140, 60)) for geometry in result.cleaned.geometry)
+
+
+def test_two_overlapping_masks_in_one_tile_are_suppressed_not_unioned():
+    source = frame([box(50, 40, 100, 60), box(52, 41, 100, 61), box(80, 40, 150, 60)],
+                   tile_id=["a", "a", "b"], score=[0.9, 0.6, 0.8], edge_touch=[True, True, True])
+    result = clean_polygons(source, crs=CRS, seam_tiles=seam_tiles(*TWO_TILES))
+    assert "seam_merged" not in set(result.removed.removed_reason)
+    assert "duplicate_overlap" in set(result.removed.removed_reason)

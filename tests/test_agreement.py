@@ -100,3 +100,13 @@ def test_an_outline_the_evaluation_left_out_is_not_a_candidate():
     summary, layers = agree(sam, esri, aoi(), crs=CRS, labels=("sam3", "esri"), reports=[report, None])
     assert layers["both"].sam3_reference_match.isna().tolist() == [False, True]
     assert summary["candidate_new"] == 0 and layers["candidate_new"].empty
+
+
+def test_reports_against_different_references_or_settings_are_refused():
+    sam, esri, reference = methods()
+    first = evaluate(sam, reference, aoi(), crs=CRS).report
+    for second in (evaluate(esri, frame([box(0, 0, 10, 10)]), aoi(), crs=CRS).report,
+                   evaluate(esri, reference, aoi(), crs=CRS, iou_threshold=0.7).report,
+                   evaluate(esri, reference, aoi(), crs=CRS, reference_status="agreement_only").report):
+        with pytest.raises(ValueError, match="same reference"):
+            agree(sam, esri, aoi(), crs=CRS, reports=[first, second])

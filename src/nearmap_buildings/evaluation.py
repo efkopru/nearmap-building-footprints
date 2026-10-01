@@ -112,8 +112,10 @@ def _subset_metrics(reference_selected, reference_matched, prediction_selected, 
     matched_predictions = int((prediction_selected & prediction_matched).sum())
     precision, recall = _ratio(matched_predictions, predictions), _ratio(matched_references, references)
     if precision is None or recall is None:
-        # Like the overall F1: zero when only one side is empty, undefined when both are.
-        f1 = 0.0 if (references or predictions) else None
+        # A pair can span two classes, so one side of a class may be empty while the
+        # other side all matched. F1 is zero only when the defined ratio is zero.
+        defined = recall if precision is None else precision
+        f1 = 0.0 if defined == 0 else None
     else:
         f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
     return {"reference": references, "matched_reference": matched_references,
@@ -137,7 +139,7 @@ def size_metrics(reference_areas, reference_matched, prediction_areas, predictio
         classes.append({"size_class": label, "min_m2": low, "max_m2": None if math.isinf(high) else high,
                         **_subset_metrics((reference_areas >= low) & (reference_areas < high), reference_matched,
                                           (prediction_areas >= low) & (prediction_areas < high), prediction_matched)})
-    thresholds = [{"min_m2": edge, **_subset_metrics(reference_areas >= edge, reference_matched,
+    thresholds = [{"size_class": f">={_edge_text(edge)}", "min_m2": edge, **_subset_metrics(reference_areas >= edge, reference_matched,
                                                      prediction_areas >= edge, prediction_matched)}
                   for edge in edges]
     return classes, thresholds
@@ -149,7 +151,7 @@ class EvaluationResult:
     layers: dict[str, gpd.GeoDataFrame]
 
 
-def _validate(frame: gpd.GeoDataFrame, label: str, target):
+def _validate(frame: gpd.GeoDataFrame, label: str, target, extra_reserved=()):
     if frame.crs is None:
         raise ValueError(f"{label}: missing CRS")
     frame = frame.to_crs(target).copy().reset_index(drop=True)
@@ -159,7 +161,7 @@ def _validate(frame: gpd.GeoDataFrame, label: str, target):
         if not isinstance(geometry, (Polygon, MultiPolygon)) or not geometry.is_valid or geometry.area <= 0:
             raise ValueError(f"{label}: invalid/nonpolygon geometry at row {index}; repair and review before evaluation")
     reserved = {"eval_id", "aoi_action", "aoi_boundary_touch", "match_id", "match_iou",
-                "area_error_m2", "relative_area_error", "boundary_hausdorff_m", "size_class"}
+                "area_error_m2", "relative_area_error", "boundary_hausdorff_m", *extra_reserved}
     if reserved.intersection(frame.columns):
         raise ValueError(f"{label}: input contains reserved evaluation fields")
     return frame
@@ -269,8 +271,10 @@ def evaluate(predictions: gpd.GeoDataFrame, reference: gpd.GeoDataFrame,
     if reference_status not in REFERENCE_REQUIREMENTS:
         raise ValueError(f"reference_status must be one of {sorted(REFERENCE_REQUIREMENTS)}")
     target = metric_crs(crs)
-    pred = _validate(predictions, "predictions", target)
-    ref = _validate(reference, "reference", target)
+    # size_class is only written, and so only reserved, when size bins are requested.
+    extra = ("size_class",) if edges is not None else ()
+    pred = _validate(predictions, "predictions", target, extra)
+    ref = _validate(reference, "reference", target, extra)
     area = _validate(aoi, "AOI", target)
     if area.empty:
         raise ValueError("AOI must contain at least one polygon")
@@ -353,7 +357,7 @@ def evaluate(predictions: gpd.GeoDataFrame, reference: gpd.GeoDataFrame,
         classes, thresholds = size_metrics([g.area for g in ref.geometry], ref.match_id >= 0,
                                            [g.area for g in pred.geometry], pred.match_id >= 0, edges)
         report.update({
-            "size_class_definition": "Each object is classed by its own area in the metric CRS, after AOI clipping. Recall in a class is over its reference objects and precision over its predictions; matching is the global one-to-one matching, not redone per class, so a matched pair may span two classes. size_thresholds give the same metrics for objects at or above each edge.",
+            "size_class_definition": "Each object is classed by its own area in the metric CRS, after AOI clipping. Recall in a class is over its reference objects and precision over its predictions; matching is the global one-to-one matching, not redone per class, so a matched pair may span two classes. A class with only references or only predictions has an undefined (null) F1 unless its one defined ratio is 0, when F1 is 0. size_thresholds give the same metrics for objects at or above each edge.",
             "size_classes": classes,
             "size_thresholds": thresholds,
             # Aligned with evaluated_reference_ids.
