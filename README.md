@@ -1,14 +1,14 @@
 # Building footprints from aerial imagery
 
 [![CPU tests](https://github.com/efkopru/nearmap-building-footprints/actions/workflows/cpu-tests.yml/badge.svg)](https://github.com/efkopru/nearmap-building-footprints/actions/workflows/cpu-tests.yml)
-![Python 3.12 | 3.13](https://img.shields.io/badge/Python-3.12%20%7C%203.13-3776AB?logo=python&logoColor=white)
+![Python 3.12 | 3.13 | 3.14](https://img.shields.io/badge/Python-3.12%20%7C%203.13%20%7C%203.14-3776AB?logo=python&logoColor=white)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/efkopru/nearmap-building-footprints/blob/main/LICENSE)
 
 **A reproducible GIS toolkit that extracts building footprints from aerial imagery with Meta's SAM 3, then compares extraction methods fairly against the same independent reference labels.**
 
 `nbf` is a Python command-line tool. It tiles GeoTIFF or VRT mosaics, runs four SAM 3 prompting modes alongside an Esri Mask R-CNN baseline and imported vendor vectors, suppresses duplicate polygons from overlapping tiles, and scores each method with one-to-one matching. Every stage records hashes and receipts, so an output polygon can be traced back to the pixels, prompts, and model weights that produced it.
 
-> **Status:** The CPU pipeline is implemented and covered by 209 automated tests, run in CI on Windows and Ubuntu with Python 3.12 and 3.13, with checkpoint tests in a separate CPU PyTorch job. SAM 3 and Esri have both run on real aerial imagery, and the [final comparison report for Lewisville, Texas](https://github.com/efkopru/nearmap-building-footprints/blob/main/results/lewisville/README.md) is published, also [as a PDF with screenshots](https://github.com/efkopru/nearmap-building-footprints/blob/main/results/lewisville/Lewisville_building_footprint_comparison.pdf): city-wide runs of SAM 3 and Esri, settings frozen by a fixed rule, and a one-time test-area score. It is scored against an older building inventory, so it measures agreement, not accuracy. Fine-tuning has not been run, and the figures are synthetic illustrations. [Details](#project-status)
+> **Status:** The CPU pipeline is implemented and covered by 209 automated tests, run in CI on Windows and Ubuntu with Python 3.12, 3.13 and 3.14, with checkpoint tests in a separate CPU PyTorch job. SAM 3 and Esri have both run on real aerial imagery, and the [final comparison report for Lewisville, Texas](https://github.com/efkopru/nearmap-building-footprints/blob/main/results/lewisville/README.md) is published, also [as a PDF with screenshots](https://github.com/efkopru/nearmap-building-footprints/blob/main/results/lewisville/Lewisville_building_footprint_comparison.pdf): city-wide runs of SAM 3 and Esri, settings frozen by a fixed rule, and a one-time test-area score. It is scored against an older building inventory, so it measures agreement, not accuracy. Fine-tuning has not been run, and the figures are synthetic illustrations. [Details](#project-status)
 
 ![Workflow from local georeferenced imagery through tiling, SAM 3 and baseline extraction, polygon cleanup, and held-out evaluation, with an optional fine-tuning route](https://raw.githubusercontent.com/efkopru/nearmap-building-footprints/main/docs/images/workflow.png)
 
@@ -81,13 +81,13 @@ Esri's model runs in ArcGIS Pro and writes a file geodatabase. `nbf import-vecto
 | Numerical | NumPy, SciPy (optimal assignment, sparse connected components), pandas |
 | Segmentation | Meta SAM 3 through SamGeo 1.4.2, PyTorch 2.10 with CUDA 12.8 on Linux or WSL2, Hydra training configs |
 | Baselines | ArcGIS Pro and ArcPy Image Analyst (Esri Mask R-CNN), vendor vector exports |
-| Quality | pytest, coverage.py, and ruff; GitHub Actions on Windows and Ubuntu with Python 3.12 and 3.13 and SHA-pinned actions; locked CPU dependencies |
+| Quality | pytest, coverage.py, and ruff; GitHub Actions on Windows and Ubuntu with Python 3.12, 3.13 and 3.14 and SHA-pinned actions; locked CPU dependencies |
 
 ## Quick start
 
 ### 1. Install the CPU toolkit
 
-Python 3.12 or 3.13 is required. On Windows PowerShell, the setup script uses 3.12, creates `.venv`, installs the locked dependencies, and runs the test suite:
+Python 3.12, 3.13 or 3.14 is required. On Windows PowerShell, the setup script uses the first of those the `py` launcher finds (or the one given with `-Python C:\path\to\python.exe`), creates `.venv`, installs the locked dependencies, and runs the test suite:
 
 ```powershell
 git clone https://github.com/efkopru/nearmap-building-footprints.git
