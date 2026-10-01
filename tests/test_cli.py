@@ -43,3 +43,14 @@ def test_doctor_works_despite_foreign_projection_environment():
     result = subprocess.run([sys.executable,"-m","nearmap_buildings.cli","doctor"],env=env,capture_output=True,text=True)
     assert result.returncode == 0
     assert '"doctor_performs_model_inference": false' in result.stdout
+
+
+def test_setup_script_passes_no_double_quotes_to_python():
+    # Windows PowerShell 5.1 strips embedded double quotes from native command
+    # arguments, which broke the venv version check in setup_cpu.ps1.
+    import re
+    from pathlib import Path
+
+    script = (Path(__file__).resolve().parents[1] / "scripts" / "setup_cpu.ps1").read_text(encoding="utf-8")
+    snippets = re.findall(r"-c '((?:[^']|'')*)'", script)
+    assert snippets and not any('"' in snippet for snippet in snippets)
