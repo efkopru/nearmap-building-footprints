@@ -1,0 +1,10 @@
+{
+  "working_directory": "..",
+  "steps": [
+    ["review-check", "--original", "data/reference/lewisville_2015.gpkg", "--reviewed", "data/reference/test_area_reviewed.gpkg", "--aoi", "data/reference/test_area_aoi.gpkg", "--metric-crs", "EPSG:26914", "--reviewer", "REVIEWER", "--imagery-date", "2026-05", "--label-convention", "roof outline; every structure of 4 m2 and up", "--output-json", "outputs/accuracy/review_check.json", "--output-gpkg", "outputs/accuracy/review_check.gpkg"],
+    ["evaluate", "--predictions", "outputs/lewisville/sam3_city/cleaned.gpkg", "--predictions-layer", "cleaned", "--reference", "data/reference/test_area_reviewed.gpkg", "--aoi", "data/reference/test_area_aoi.gpkg", "--metric-crs", "EPSG:26914", "--independent-holdout", "--size-bins-m2", "20", "50", "100", "--output-json", "outputs/accuracy/sam3/evaluation.json", "--output-gpkg", "outputs/accuracy/sam3/evaluation.gpkg"],
+    ["evaluate", "--predictions", "outputs/lewisville/esri_city/cleaned.gpkg", "--predictions-layer", "cleaned", "--reference", "data/reference/test_area_reviewed.gpkg", "--aoi", "data/reference/test_area_aoi.gpkg", "--metric-crs", "EPSG:26914", "--independent-holdout", "--size-bins-m2", "20", "50", "100", "--output-json", "outputs/accuracy/esri_city/evaluation.json", "--output-gpkg", "outputs/accuracy/esri_city/evaluation.gpkg"],
+    ["evaluate", "--predictions", "outputs/lewisville/esri_local/cleaned.gpkg", "--predictions-layer", "cleaned", "--reference", "data/reference/test_area_reviewed.gpkg", "--aoi", "data/reference/test_area_aoi.gpkg", "--metric-crs", "EPSG:26914", "--independent-holdout", "--size-bins-m2", "20", "50", "100", "--output-json", "outputs/accuracy/esri_local/evaluation.json", "--output-gpkg", "outputs/accuracy/esri_local/evaluation.gpkg"],
+    ["compare", "--reports", "outputs/accuracy/sam3/evaluation.json", "outputs/accuracy/esri_city/evaluation.json", "outputs/accuracy/esri_local/evaluation.json", "--labels", "sam3", "esri_city", "esri_local", "--output", "outputs/accuracy/comparison.csv", "--by-size", "outputs/accuracy/comparison_by_size.csv", "--per-building", "outputs/accuracy/per_building.gpkg"]
+  ]
+}
