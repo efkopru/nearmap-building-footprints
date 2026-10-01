@@ -13,6 +13,7 @@ COMMANDS = {
     "evaluate": ("evaluation", "main"),
     "compare": ("compare", "main"),
     "agree": ("agreement", "main"),
+    "review-check": ("review", "main"),
     "train": ("training", "main"),
     "esri": ("esri", "main"),
     "esri-chunks": ("esri_chunks", "main"),
