@@ -79,7 +79,7 @@ def load_prompts(path, method):
     if not frame["label"].isin([0, 1]).all():
         raise ValueError("Prompt label must be 1 (include) or 0 (exclude).")
     if method == "box" and (frame.label != 1).any():
-        raise ValueError("Instance boxes must be positive; negative concept boxes belong to exemplar mode.")
+        raise ValueError("Box prompts must be positive; negative exemplar boxes belong to exemplar mode.")
     if method == "point":
         if "object_id" not in frame or frame.object_id.isna().any():
             raise ValueError("Point prompts need object_id; points with the same ID describe one object.")
@@ -194,7 +194,7 @@ def run(args, model_factory=None):
     if not 0 <= args.confidence <= 1 or args.min_pixels < 1 or (args.limit is not None and args.limit < 1):
         raise ValueError("Invalid confidence, min-pixels or limit.")
     if args.method != "text" and args.text != "building":
-        raise ValueError("--text is only used in text mode; exemplar mode uses visual concepts alone.")
+        raise ValueError("--text is only used in text mode; exemplar mode uses image exemplars alone.")
     manifest = read_json(args.manifest)
     if manifest.get("schema_version") != 1 or manifest.get("status") != "complete":
         raise ValueError("Use a completed schema_version=1 tile manifest.")

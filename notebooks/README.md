@@ -5,7 +5,7 @@ Four walkthroughs of how SAM 3 and Esri's model are run and scored, from raw ima
 | Notebook | What it covers | Environment it was executed in |
 |---|---|---|
 | [01_prepare_imagery](01_prepare_imagery.ipynb) | Inspecting a raster, fixing a mislabelled CRS with a VRT (no resampling), tiling | The CPU environment |
-| [02_run_sam3](02_run_sam3.ipynb) | Checkpoint check, inference plan, a resumable GPU run, cut-offs from stored scores, cleanup, scoring | WSL2 Ubuntu with an RTX 4050 and the SAM 3 environment |
+| [02_run_sam3](02_run_sam3.ipynb) | Checkpoint check, inference plan, a resumable GPU run, confidence thresholds from stored scores, cleanup, scoring | WSL2 Ubuntu with an RTX 4050 and the SAM 3 environment |
 | [03_run_esri](03_run_esri.ipynb) | Esri's model through ArcGIS Pro, city-scale overlapping chunks with process restarts, core-ownership merge, importing Esri output | The CPU environment, calling ArcGIS Pro 3.7's Python for the model |
 | [04_score_and_compare](04_score_and_compare.ipynb) | Cleanup, evaluation, per-building comparison, tuning, the freezing rule, a once-only test-area score | The CPU environment |
 
@@ -25,6 +25,6 @@ Without a CUDA GPU and `models/sam3.pt`, notebook 2 prints the plan and skips th
 The demo image is nine flat roofs on a flat background, with exact reference outlines. It checks that every step runs and that the numbers add up. It says nothing about accuracy on real imagery. Two results make that plain:
 
 - **SAM 3 finds nothing for the prompt "building":** the flat rectangles don't look like buildings. For "rectangle" it finds some of them, and the rest of notebook 2 cleans and scores that run.
-- **Esri's model finds all nine roofs, but at confidence 0.5 to 0.7:** that is below the 0.9 cut-off frozen for Lewisville, so notebook 3 keeps the run's own 0.5 threshold.
+- **Esri's model finds all nine roofs, but at confidence 0.5 to 0.7:** that is below the 0.9 confidence threshold frozen for Lewisville, so notebook 3 keeps the run's own 0.5 threshold.
 
 The real results are in [results/lewisville](../results/lewisville/README.md), and screenshots of both models on Lewisville's imagery are in its [PDF report](../results/lewisville/Lewisville_building_footprint_comparison.pdf).
