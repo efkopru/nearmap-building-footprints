@@ -139,7 +139,7 @@ nbf esri-chunks merge --gdb 'C:\analysis\esri_chunks.gdb' --chunks data/prepared
 nbf clean --input outputs/esri_city/raw.gpkg --output outputs/esri_city/cleaned.gpkg --metric-crs EPSG:26914
 ```
 
-- **plan** writes a small VRT per chunk. Each chunk has a core that no other core overlaps, plus `--overlap` pixels on every side so buildings on a core's edge are seen whole. A source that marks missing imagery with a mask or alpha band is refused; give it a nodata value and tile it again.
+- **plan** writes a small VRT per chunk. Each chunk has a core that no other core overlaps, plus `--overlap` pixels on every side to provide context for buildings near a core's edge. Buildings extending beyond that overlap can still be cut. A source that marks missing imagery with a mask or alpha band is refused; give it a nodata value and tile it again.
 - **run** prints the ArcGIS command; add `--execute` to start. It runs `--per-process` chunks in one ArcGIS Pro Python process (`--arcgis-python`), then starts a fresh one. Each finished chunk leaves a done-marker, so rerunning the same command resumes. Use a separate `--done` folder and `--gdb` for each plan. The run stops after `--max-failures` processes in a row fail without finishing a chunk.
 - **merge** keeps each detection only in the chunk whose core holds it, so nothing is counted twice. `--min-score` applies a frozen confidence cut-off, and `source_id` (`<chunk>:<OBJECTID>`) finds any outline again in ArcGIS Pro.
 

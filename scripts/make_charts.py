@@ -198,7 +198,7 @@ def icon_score(svg, x, y, t):
 
 def how_it_works(t):
     steps = [(icon_image, "Aerial image", ["A GeoTIFF or VRT,", "never changed"]),
-             (icon_tiles, "Cut into tiles", ["Overlapping, so no", "building is lost"]),
+             (icon_tiles, "Cut into tiles", ["Overlap adds context", "at tile edges"]),
              (icon_outlines, "AI draws outlines", ["SAM 3 and Esri's", "building model"]),
              (icon_score, "Clean and score", ["Same rules and same", "map for each model"])]
     pad, gap, card_h = 20, 28, 160
