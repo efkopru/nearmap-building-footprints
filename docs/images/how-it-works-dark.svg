@@ -16,8 +16,8 @@
 <rect x="255.0" y="56" width="28" height="24" rx="3" fill="#898781" fill-opacity="0.35" stroke="#c3c2b7" stroke-width="1.5"/>
 <rect x="275.0" y="56" width="28" height="24" rx="3" fill="#898781" fill-opacity="0.35" stroke="#c3c2b7" stroke-width="1.5"/>
 <text x="255" y="116" font-size="16" font-weight="700" text-anchor="start" fill="#ffffff">Cut into tiles</text>
-<text x="255" y="140" font-size="13.5" font-weight="400" text-anchor="start" fill="#c3c2b7">Overlapping, so no</text>
-<text x="255" y="159" font-size="13.5" font-weight="400" text-anchor="start" fill="#c3c2b7">building is lost</text>
+<text x="255" y="140" font-size="13.5" font-weight="400" text-anchor="start" fill="#c3c2b7">Overlap adds context</text>
+<text x="255" y="159" font-size="13.5" font-weight="400" text-anchor="start" fill="#c3c2b7">at tile edges</text>
 <path d="M433.0 100.0h13m-5 -5l5 5l-5 5" fill="none" stroke="#898781" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
 <rect x="454" y="20" width="189" height="160" rx="10" fill="#242422"/>
 <path d="M475.0 58l14 -14l14 14v20h-28z" fill="none" stroke="#e66767" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>

@@ -8,7 +8,7 @@ A model's confidence score, a vendor's benchmark or a passing synthetic test is 
 
 | Pitfall | How this project handles it |
 | --- | --- |
-| Tiles cut buildings at their edges, and overlapping tiles see them twice. | Full-size overlapping tiles, flags on cut outlines, and cleanup that keeps the complete copy and never merges neighbours. |
+| Tiles cut buildings at their edges, and overlapping tiles see them twice. | Full-size overlapping tiles, flags on cut outlines, and cleanup that prefers complete copies and never merges neighbours. |
 | Random tile splits put the same building in training and test data. | Training, validation and test areas are separate regions, checked for overlap, distance and buildings crossing them. |
 | Greedy matching undercounts correct outlines, and edge handling quietly shifts scores. | Optimal one-to-one matching, and a recorded rule for buildings on the area's edge. |
 | Confidence scores and vendor benchmarks are taken as accuracy. | Every method is scored against the same reference outlines, and reports with different references refuse to be compared. |

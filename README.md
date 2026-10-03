@@ -70,7 +70,7 @@ The demo's "predictions" are copies of its reference outlines, so the perfect sc
 ## What's inside
 
 - **Seven ways to get outlines:** SAM 3 with a text prompt, example boxes, one box per building or points; a fine-tuned SAM 3; Esri's model in ArcGIS Pro; or an existing layer such as Nearmap AI.
-- **No lost or doubled buildings at tile edges:** tiles overlap, and cleanup keeps the complete copy of each building.
+- **Reduce tile-edge errors:** tiles overlap, and cleanup prefers complete outlines over cut copies. Buildings longer than a tile can still be split.
 - **Fair scoring:** each building matches at most one outline, and reports made against different reference maps refuse to be compared.
 - **Traceable results:** hashes link every outline to the pixels, prompts and model weights that made it, and interrupted runs resume safely.
 
