@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="200" viewBox="0 0 880 200" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+<rect x="0.5" y="0.5" width="879" height="199" rx="12" fill="#fcfcfb" stroke="#e1e0d9"/>
+<rect x="20" y="20" width="189" height="160" rx="10" fill="#f3f2ee"/>
+<rect x="38" y="40" width="48" height="40" rx="6" fill="none" stroke="#52514e" stroke-width="1"/>
+<rect x="45" y="47" width="14" height="11" rx="1" fill="#898781"/>
+<rect x="65" y="46" width="14" height="9" rx="1" fill="#898781"/>
+<rect x="46" y="64" width="10" height="9" rx="1" fill="#898781"/>
+<rect x="62" y="61" width="17" height="13" rx="1" fill="#898781"/>
+<text x="38" y="116" font-size="16" font-weight="700" text-anchor="start" fill="#0b0b0b">Aerial image</text>
+<text x="38" y="140" font-size="13.5" font-weight="400" text-anchor="start" fill="#52514e">A GeoTIFF or VRT,</text>
+<text x="38" y="159" font-size="13.5" font-weight="400" text-anchor="start" fill="#52514e">never changed</text>
+<path d="M216.0 100.0h13m-5 -5l5 5l-5 5" fill="none" stroke="#898781" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<rect x="237" y="20" width="189" height="160" rx="10" fill="#f3f2ee"/>
+<rect x="255.0" y="40" width="28" height="24" rx="3" fill="#898781" fill-opacity="0.35" stroke="#52514e" stroke-width="1.5"/>
+<rect x="275.0" y="40" width="28" height="24" rx="3" fill="#898781" fill-opacity="0.35" stroke="#52514e" stroke-width="1.5"/>
+<rect x="255.0" y="56" width="28" height="24" rx="3" fill="#898781" fill-opacity="0.35" stroke="#52514e" stroke-width="1.5"/>
+<rect x="275.0" y="56" width="28" height="24" rx="3" fill="#898781" fill-opacity="0.35" stroke="#52514e" stroke-width="1.5"/>
+<text x="255" y="116" font-size="16" font-weight="700" text-anchor="start" fill="#0b0b0b">Cut into tiles</text>
+<text x="255" y="140" font-size="13.5" font-weight="400" text-anchor="start" fill="#52514e">Overlapping, so no</text>
+<text x="255" y="159" font-size="13.5" font-weight="400" text-anchor="start" fill="#52514e">building is lost</text>
+<path d="M433.0 100.0h13m-5 -5l5 5l-5 5" fill="none" stroke="#898781" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<rect x="454" y="20" width="189" height="160" rx="10" fill="#f3f2ee"/>
+<path d="M475.0 58l14 -14l14 14v20h-28z" fill="none" stroke="#e34948" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M492.0 62h26v18h-26z" fill="none" stroke="#2a78d6" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+<text x="472" y="116" font-size="16" font-weight="700" text-anchor="start" fill="#0b0b0b">AI draws outlines</text>
+<text x="472" y="140" font-size="13.5" font-weight="400" text-anchor="start" fill="#52514e">SAM 3 and Esri's</text>
+<text x="472" y="159" font-size="13.5" font-weight="400" text-anchor="start" fill="#52514e">building model</text>
+<path d="M650.0 100.0h13m-5 -5l5 5l-5 5" fill="none" stroke="#898781" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<rect x="671" y="20" width="189" height="160" rx="10" fill="#f3f2ee"/>
+<line x1="689" y1="80" x2="737" y2="80" stroke="#52514e" stroke-width="2"/>
+<rect x="695" y="46" width="14" height="34" rx="0" fill="#e34948"/>
+<rect x="715" y="54" width="14" height="26" rx="0" fill="#2a78d6"/>
+<text x="689" y="116" font-size="16" font-weight="700" text-anchor="start" fill="#0b0b0b">Clean and score</text>
+<text x="689" y="140" font-size="13.5" font-weight="400" text-anchor="start" fill="#52514e">Same rules and same</text>
+<text x="689" y="159" font-size="13.5" font-weight="400" text-anchor="start" fill="#52514e">map for each model</text>
+</svg>
