@@ -12,10 +12,13 @@ its licensed imagery, stays out of the repository.
 """
 
 import argparse
+from html import escape
+from html.parser import HTMLParser
 import shutil
 import subprocess
 import tempfile
 from pathlib import Path
+from urllib.parse import urljoin
 
 CREDIT = "Imagery: Nearmap, May 2026"
 
@@ -61,6 +64,35 @@ def public_edition(html):
     return html + PRINT_LAYOUT
 
 
+def preserve_asset_base(html, source):
+    """Keep saved-page assets relative to the source, including an explicit base."""
+    class Page(HTMLParser):
+        head_end = None
+        base = None
+
+        def handle_starttag(self, tag, attrs):
+            if tag not in {"head", "base"}:
+                return
+            line, column = self.getpos()
+            start = sum(len(part) for part in html.splitlines(keepends=True)[:line - 1]) + column
+            end = start + len(self.get_starttag_text())
+            if tag == "head" and self.head_end is None:
+                self.head_end = end
+            if tag == "base" and self.base is None and any(key == "href" for key, _ in attrs):
+                self.base = (start, end, attrs)
+
+    page = Page()
+    page.feed(html)
+    source_uri = source.resolve().as_uri()
+    if page.base is not None:
+        start, end, attrs = page.base
+        attrs = [(key, urljoin(source_uri, value or "") if key == "href" else value) for key, value in attrs]
+        tag = "<base" + "".join(f" {key}" if value is None else f' {key}="{escape(value, quote=True)}"' for key, value in attrs) + ">"
+        return html[:start] + tag + html[end:]
+    position = page.head_end if page.head_end is not None else 0
+    return html[:position] + f'<base href="{escape(source_uri, quote=True)}">' + html[position:]
+
+
 def find_browser(explicit=None):
     for candidate in [explicit] if explicit else BROWSERS:
         found = shutil.which(candidate) or (candidate if Path(candidate).is_file() else None)
@@ -79,13 +111,25 @@ def main(argv=None):
     output = args.output.resolve()
     with tempfile.TemporaryDirectory() as tmp:
         page = Path(tmp) / "public.html"
-        page.write_text(public_edition(args.report.read_text(encoding="utf-8")), encoding="utf-8")
+        html = public_edition(args.report.read_text(encoding="utf-8"))
+        page.write_text(preserve_asset_base(html, args.report), encoding="utf-8")
+        rendered = Path(tmp) / "report.pdf"
         # The time budget lets the page's script draw its charts and tables before printing.
         subprocess.run([browser, "--headless", "--disable-gpu", "--no-first-run", f"--user-data-dir={Path(tmp) / 'profile'}",
-                        "--no-pdf-header-footer", "--virtual-time-budget=15000", f"--print-to-pdf={output}", page.as_uri()],
+                        "--no-pdf-header-footer", "--virtual-time-budget=15000", f"--print-to-pdf={rendered}", page.as_uri()],
                        check=True, capture_output=True)
-    if not output.is_file():
-        raise RuntimeError(f"{browser} did not write {output}")
+        if not rendered.is_file():
+            raise RuntimeError(f"{browser} did not write a PDF")
+        with rendered.open("rb") as pdf:
+            header = pdf.read(8)
+        if len(header) < 8 or not header.startswith(b"%PDF-"):
+            raise RuntimeError(f"{browser} did not write a PDF")
+        output.parent.mkdir(parents=True, exist_ok=True)
+        # Stage beside the destination so replacement also works across drives.
+        with tempfile.TemporaryDirectory(dir=output.parent) as staging:
+            ready = Path(staging) / "report.pdf"
+            shutil.copyfile(rendered, ready)
+            ready.replace(output)
     print(f"Wrote {output}")
 
 
