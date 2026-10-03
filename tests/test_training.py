@@ -231,8 +231,7 @@ def test_vector_import_cli_prints_json(tmp_path, capsys):
 
 
 @pytest.mark.parametrize("relative", ["scripts/setup_sam3.sh", "configs/sam3_training.example.yaml",
-                                      "docs/USAGE.md", "docs/OPTIONAL_METHODS.md", "docs/SOURCES.md",
-                                      "docs/VALIDATION.md"])
+                                      "docs/USAGE.md", "docs/METHODOLOGY.md"])
 def test_pinned_sam3_commit_matches_everywhere_it_is_written(relative):
     commits = set(re.findall(r"\b[0-9a-f]{40}\b", (ROOT / relative).read_text(encoding="utf-8")))
     assert commits == {SAM3_COMMIT}

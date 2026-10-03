@@ -1,144 +1,124 @@
-# Building extraction methodology
+# Methodology
 
-This protocol compares ways to extract building polygons from **local, authorized Nearmap imagery**. It defines what to measure and what evidence to retain. The [usage guide](USAGE.md) provides the actual commands and supported adapters. A documented method, a successful synthetic test, or a model confidence score is not evidence of accuracy on Nearmap imagery.
+How to compare ways of extracting building outlines fairly, how the code enforces it, and what has been tested. The commands are in the [usage guide](USAGE.md).
 
-Keep imagery, labels, checkpoints, prompts containing real locations, and generated vectors local. This workflow does not require uploading data or calling a paid Nearmap API. Import already available, authorized imagery and AI vector exports. Model acquisition and software installation are separate setup steps, subject to the model's access requirements and license.
+A model's confidence score, a vendor's benchmark or a passing synthetic test is not accuracy on your imagery. Only outlines scored against independent reference outlines are.
 
-## 1. Define the target before extracting it
+## Common pitfalls
 
-Use one explicit label convention per experiment:
-
-- **Visible roof outline:** the roof perimeter visible in the image, including the agreed treatment of overhangs, attached structures, carports, and sheds.
-- **Ground footprint:** the building's intersection with the ground, supported by appropriate reference data. A roof mask alone cannot establish that boundary.
-
-Off-nadir displacement, roof overhangs, shadows, vegetation, and capture-date differences can produce legitimate disagreement between roofs and ground footprints. Polygon smoothing or right-angle regularization does not convert one convention into the other. Preserve separate layers if both are needed.
-
-Nearmap's Building Footprints documentation specifically identifies generations 1 through 5 with roof outlines. Check the actual imported product and generation rather than generalizing this to every export. Its fidelity score describes agreement with the provider's prediction raster, not agreement with independent ground truth. [Nearmap Building Footprints](https://help.nearmap.com/kb/articles/787-ai-pack-building-footprints)
-
-Write a short annotation specification covering attached buildings, courtyards, partial visibility, minimum included size, temporary structures, and uncertain objects. Give each labeled building a stable instance ID. Do not use the model being evaluated to create unreviewed reference labels.
-
-## 2. Freeze imagery, AOIs, and evaluation splits
-
-An area of interest (AOI) is the geographic boundary within which results are assessed. Use several spatially separate AOIs that cover the intended operating conditions: dense and sparse development, large and small roofs, varied materials, tree cover, shadows, and difficult adjoining buildings. Include genuine building-free areas so false detections can be measured.
-
-Fully label every target building inside each evaluation AOI. Sparse example polygons do not constitute exhaustive ground truth. Declare ignored areas for unusable imagery or unresolved annotation before scoring. Record the reason and excluded area. Predetermine how objects crossing AOI boundaries are handled, for example by scoring only buildings wholly inside a buffered evaluation core.
-
-Divide AOIs geographically into training, validation, and a held-out test set. Keep overlapping tiles, the same building, adjacent context, and repeat captures of that building within one split. Use separation buffers appropriate to tile context. Record the split assignment before tuning. Training changes weights; validation selects prompts, thresholds, tile sizes, and cleanup parameters; the held-out test measures the final frozen configuration.
-
-For directly comparable runs, use the same imagery capture, band preparation, ground sample distance (GSD), labeled AOIs, and target convention. If an imported vendor layer represents another survey or an unknown resolution, report it as an unmatched comparison and inspect change-related disagreements separately. Do not present it as a controlled model ranking.
-
-## 3. Choose the method and record the human input
-
-SAM 3 supports concept segmentation using text or visual exemplars. These inputs can ask for multiple matching objects in an image. They are different from prompts that identify one particular instance. [Meta SAM 3](https://github.com/facebookresearch/sam3)
-
-| Method | Input supplied beyond the image | Meaning of the result | Comparison category |
-| --- | --- | --- | --- |
-| SAM 3 text | A fixed phrase such as `building roof` | Candidate instances matching the phrase | Automated extraction after validation-time prompt selection |
-| SAM 3 visual concept | Positive and optional negative exemplar boxes | Candidate instances matching the demonstrated concept | Guided concept extraction; report exemplar effort |
-| SAM 3 instance prompts | A box or grouped foreground/background points for a selected building | Mask for the prompted object | Assisted segmentation; report object-selection and correction effort |
-| Fine-tuned SAM 3 | A locally trained checkpoint plus its inference prompts | Predictions from the adapted model | Separate trained experiment |
-| Esri Mask R-CNN | A fixed building extraction model package and inference settings | Building instances from the baseline | Automated extraction |
-| Imported Nearmap AI | A preexisting local vector export | Provider-generated building polygons | Imported product comparison; no local inference claimed |
-
-### SAM 3 text prompts
-
-Choose candidate phrases on validation AOIs, then freeze the exact phrase and confidence threshold. Start a fresh image state for each tile and preserve the raw instance masks and scores. The repository's current adapter runs text or visual concept prompts separately. A combined-prompt or multiple-phrase workflow would be a different experiment requiring explicit implementation and duplicate-resolution rules.
-
-### SAM 3 visual concept exemplars
-
-A positive box demonstrates a desired object; a negative box demonstrates an unwanted example. This guides the concept detector and can affect predictions elsewhere in the same image. It does not constrain the output to exactly the boxed building. Meta's image example demonstrates positive and negative visual boxes. [Official image example](https://github.com/facebookresearch/sam3/blob/main/examples/sam3_image_predictor_example.ipynb)
-
-The native processor accepts these boxes as normalized center-x, center-y, width, height values in `[0, 1]`, with a Boolean positive/negative label. Its state can also contain text, but this repository's SamGeo adapter uses separate text and exemplar modes because the wrapper resets prompts. [Processor implementation](https://github.com/facebookresearch/sam3/blob/main/sam3/model/sam3_image_processor.py), [SamGeo wrapper reference](https://samgeo.gishub.org/samgeo3/)
-
-Store the source image ID, box coordinates, coordinate convention, labels, and prompt order. Boxes belong to their source image. The current adapter scopes exemplars to that same tile and does not transfer them across images. Tiles without a complete positive prompt are logged as skipped. Record this coverage: skipped areas cannot disappear from a full-AOI evaluation or be reported as successfully processed. Fix the prompting budget before test evaluation.
-
-### SAM 3 per-building boxes and points
-
-Use the instance-interactive path for a selected building. The native image model exposes `predict_inst` separately from concept grounding. Its predictor uses XYXY boxes, XY pixel points, and point labels `1` for foreground and `0` for background under its normal image-coordinate interface. Alternative masks have predicted quality scores. [Image model](https://github.com/facebookresearch/sam3/blob/main/sam3/model/sam3_image.py), [instance predictor](https://github.com/facebookresearch/sam3/blob/main/sam3/model/sam1_task_predictor.py)
-
-The current adapter accepts an instance box or a group of points, rather than a combined box-plus-points call. Record one prompt group per intended instance, including corrections and elapsed annotation time. A negative point excludes pixels from that instance; a negative concept box teaches which example is unwanted. They are not interchangeable. Select alternative masks with a predeclared rule, not whichever best matches the hidden test polygon.
-
-If boxes or points are derived from reference labels, label the result **oracle-prompted segmentation**. It measures delineation given object location and does not establish automatic building detection recall. To measure a complete assisted workflow, include missed buildings, object selection, and correction time.
-
-### Optional SAM 3 fine-tuning
-
-First run the frozen pretrained baseline. Fine-tune only if validation errors and sufficient local labels justify a separate experiment. Keep the pretrained checkpoint as a control. Training is not presumed to improve results.
-
-Meta provides Hydra-configured training with local single-GPU and distributed options. Adapt the pinned upstream dataset/configuration contract, including segmentation targets and exhaustive-label indicators; an arbitrary GeoJSON file is not automatically a valid training dataset. Preserve resolved configuration, checkpoints, training logs, and validation results. [Meta training guide](https://github.com/facebookresearch/sam3/blob/main/README_TRAIN.md)
-
-Convert only training labels into training examples, with stable image/instance IDs and traceable pixel-to-map transforms. Verify polygons, holes, class labels, empty images, and image/mask alignment visually. Confirm one batch loads and produces a finite loss before a longer run. Choose checkpoint, stopping rule, augmentations, and hyperparameters using validation data. Evaluate the selected checkpoint on the untouched test AOIs using the same procedure as the baseline. Record which parts of the model were trained; do not assume fine-tuning the concept detector also adapts the instance-interactive path.
-
-**Environment target:** use Linux, or a Linux environment under Windows WSL2 with a compatible NVIDIA GPU, for native Meta SAM 3 training. This is the project's supported route, not a claim that Meta certifies every WSL2 configuration. Meta currently lists Python 3.12+, PyTorch 2.7+, and CUDA 12.6+; its current installation example uses a newer PyTorch/CUDA build. Pin a coherent, tested dependency set instead of mixing minimum versions with current examples. [Meta prerequisites](https://github.com/facebookresearch/sam3#installation)
-
-The upstream training configuration uses CUDA and NCCL, and Triton lists Linux as its supported platform. Native Windows training is therefore outside this protocol's supported setup. NVIDIA documents CUDA on WSL2 using the Windows NVIDIA driver; do not install a Linux display driver inside WSL2. Check GPU architecture, available VRAM, driver/runtime compatibility, and actual framework GPU visibility before attempting training. These are setup requirements; **CUDA installation and a successful training run are not established by this document**. [Meta configuration](https://github.com/facebookresearch/sam3/blob/main/sam3/train/configs/eval_base.yaml), [Triton compatibility](https://github.com/triton-lang/triton#compatibility), [NVIDIA WSL guide](https://docs.nvidia.com/cuda/wsl-user-guide/index.html)
-
-### Esri Mask R-CNN baseline
-
-Use a fixed, locally available Building Footprint Extraction USA model package and record its version/hash. Esri identifies this model as Mask R-CNN. Its published benchmark does not measure this project's AOIs. Confirm the selected package's intended geography, input bands, cell size, and model definition before inference. [Esri model description](https://doc.arcgis.com/en/pretrained-models/latest/imagery/introduction-to-building-footprint-extraction-usa.htm)
-
-Run in the compatible ArcGIS Pro deep learning environment with the required Image Analyst license. Preserve the `.emd`/`.dlpk` provenance and all inference arguments, including padding, threshold, tile size, batch size, and NMS. Use a fresh output per run: the detection tool can append to an existing feature class. Avoid double suppression when both the tool and a later merge stage remove duplicates. [Esri detection tool](https://doc.esri.com/en/arcgis-pro/latest/tool-reference/image-analyst/detect-objects-using-deep-learning.html)
-
-### Imported Nearmap AI vectors
-
-Import a local export without requesting fresh imagery or AI features. Preserve the original file and its provider identifiers, survey/capture date, AI generation, feature type, coordinate system, and available confidence/fidelity fields. Map these fields into the run manifest without assuming every export has the same schema. Keep provider scores distinct from scores emitted by locally run models. Evaluate a copy through the common AOI and scoring rules. Report the method as an import, not as a SAM 3 or Esri inference run.
-
-## 4. Tile with enough context and preserve georeferencing
-
-Retain the original raster and a manifest of CRS, affine transform, dimensions, nodata/valid-data mask, bands, capture date, GSD, and checksum. Apply a declared, repeatable band/color transformation rather than independently stretching each test tile.
-
-Tile size and overlap are in **pixels**. Their ground extent depends on GSD. Choose candidate values on validation AOIs so representative large roofs can appear whole with surrounding context. Small overlap can leave split roofs; excessive overlap increases duplicate predictions and processing. There is no universal tile size or overlap that guarantees good extraction. Record any model resizing and effective inference resolution.
-
-For each tile retain its raster window, padding, image ID, and transform. Transform mask boundaries back through any resize/padding operation, then through the full pixel-to-map transform. Do not reconstruct coordinates from filename guesses or GSD alone. Rasterio distinguishes pixel coordinates from spatial coordinates and supports the appropriate transform operations. [Rasterio transforms](https://rasterio.readthedocs.io/en/stable/topics/transforms.html)
-
-Check alignment with a local overlay before scaling up. Clip padded predictions to valid imagery and use the predetermined AOI rule. Preserve flags for masks touching tile edges, nodata, and evaluation boundaries.
-
-## 5. Stitch instances and clean polygons conservatively
-
-The extraction adapter produces raw per-tile polygons with edge flags; cleanup and duplicate suppression are separate stages. These outputs do not guarantee seamless stitching. Retain the contributing tile/instance IDs in a common projected CRS. Identify duplicate hypotheses in overlap areas using spatial agreement and a declared selection rule, such as overlap plus preference for a complete interior prediction. Store the chosen and suppressed IDs. Confidence alone may favor a truncated prediction.
-
-Do not dissolve every intersecting polygon: adjacent buildings can touch, while repeated predictions of one building may disagree. Do not assume ordinary duplicate suppression reconnects edge fragments. Inspect residual cuts, missing pieces, duplicate roofs, and falsely joined buildings; flag unresolved cases for review. Evaluate the stitched layer before geometric cleanup.
-
-Repair invalid geometry, retain polygonal components deliberately, and log anything removed or split. A validity repair can return a geometry collection or lower-dimensional remnants, so a successful function call alone is insufficient. [Shapely validity repair](https://shapely.readthedocs.io/en/stable/reference/shapely.make_valid.html)
-
-Choose a suitable local projected CRS for metric operations. Express minimum area in square metres and simplification/boundary tolerances in metres, with explicit unit conversion. Do not treat geographic degrees or arbitrary projected units as metres. For square, north-up pixels, area is `pixel_count × GSD²`; use the affine determinant for general raster cell area and account for CRS units.
-
-Preserve meaningful holes and separate building identities. Keep the unmodified polygon alongside the cleaned version or retain a reproducible change log. Track area change, vertex reduction, splits, merges, and removals. Do not apply blanket polygon orthogonalization: curved roofs, diagonal wings, and irregular buildings are legitimate. Any rectilinear regularization is a separately evaluated, opt-in treatment for appropriate structures.
-
-## 6. Evaluate detection, shape, and effort separately
-
-Freeze confidence thresholds, matching rules, and cleanup settings before opening test results. Confidence and predicted mask quality are model outputs, **not measured accuracy**. Show each method's raw, stitched, and cleaned stage when comparing the effect of postprocessing.
-
-For instance detection, compute polygon intersection-over-union (IoU), `intersection area / union area`, within the valid evaluation region. Match predictions and labels one-to-one at a declared threshold, such as 0.50, with a deterministic matching rule. Report the exact assignment algorithm. Count unmatched predictions as false positives and unmatched reference buildings as false negatives. Report `precision = TP/(TP+FP)`, `recall = TP/(TP+FN)`, and `F1 = 2TP/(2TP+FP+FN)`. Retain TP/FP/FN counts; mark undefined ratios rather than silently treating empty denominators as perfect scores.
-
-Report matched polygon IoU for shape quality, while retaining recall so missed buildings cannot disappear from the assessment. Raster foreground IoU/Dice can supplement this, but unioned masks do not expose instance merges and splits. If boundary quality matters, use a declared tolerance in metres and record its definition. Count merge/split errors, count bias, area bias, and review-required objects. Evaluate errors by AOI and relevant difficulty strata. Any uncertainty interval should respect spatial grouping, not treat neighboring pixels as independent observations.
-
-Assisted and oracle-prompted results belong in separate comparison groups. Report prompts, selection effort, and corrections alongside quality. Record preprocessing, inference, stitching, cleanup, and human-review time separately, along with hardware and warm/cold execution conditions. A vendor import has import time, not a locally measured model inference time.
-
-### Run manifest template
-
-| Field group | Required record |
+| Pitfall | How this project handles it |
 | --- | --- |
-| Identity | Run ID; timestamp; method; automated/assisted/imported; execution status; repository commit |
-| Input | Local input manifest hash; capture date; CRS; GSD; bands; AOI and split IDs; valid/ignored area |
-| Reference | Label version/hash; roof/ground convention; complete-label policy; boundary policy; reviewer |
-| Model | Provider; exact checkpoint/package; file hash; upstream commit; license/access provenance |
-| Environment | OS or WSL distribution; Python/packages; GPU/VRAM; driver; framework CUDA runtime; verified GPU visibility |
-| Inference | Text; exemplar/instance prompt file hash and coordinate convention; thresholds; tile pixels; overlap pixels; resize; precision; seed where applicable |
-| Processing | CRS and units; duplicate rule; repair policy; area/simplification tolerances; original and output hashes |
-| Evaluation | Split; IoU threshold; matching rule; metrics definitions; stage; script/config version; excluded objects |
-| Cost and review | Stage runtimes; prompt/correction counts; human minutes; failed tiles; unresolved cases |
+| Tiles cut buildings at their edges, and overlapping tiles see them twice. | Full-size overlapping tiles, flags on cut outlines, and cleanup that keeps the complete copy and never merges neighbours. |
+| Random tile splits put the same building in training and test data. | Training, validation and test areas are separate regions, checked for overlap, distance and buildings crossing them. |
+| Greedy matching undercounts correct outlines, and edge handling quietly shifts scores. | Optimal one-to-one matching, and a recorded rule for buildings on the area's edge. |
+| Confidence scores and vendor benchmarks are taken as accuracy. | Every method is scored against the same reference outlines, and reports with different references refuse to be compared. |
+| A roof outline is treated as a ground footprint. | The outline convention is recorded per experiment; smoothing never claims to turn one into the other. |
 
-### Comparison report template
+## 1. Decide what counts as an outline
 
-Populate only from retained outputs and reference labels. `Not run` is a status, not a zero-valued metric. Add rows for each stage or frozen variant rather than replacing a poor result.
+Pick one convention per experiment and write it down:
 
-| Method and stage | Status | Comparable imagery/labels? | Test AOIs / reference count | TP / FP / FN | Precision / recall / F1 | Matched IoU | Human effort | Runtime |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| SAM 3 text | Not run | Pending verification | Not measured | Not measured | Not measured | Not measured | Not measured | Not measured |
-| SAM 3 visual concept | Not run | Pending verification | Not measured | Not measured | Not measured | Not measured | Not measured | Not measured |
-| SAM 3 instance-assisted | Not run | Separate assisted group | Not measured | Not measured | Not measured | Not measured | Not measured | Not measured |
-| Fine-tuned SAM 3 | Not run | Pending verification | Not measured | Not measured | Not measured | Not measured | Not measured | Not measured |
-| Esri Mask R-CNN | Not run | Pending verification | Not measured | Not measured | Not measured | Not measured | Not measured | Not measured |
-| Nearmap AI import | Not run | Verify survey and convention | Not measured | Not measured | Not measured | Not measured | Not measured | Import only |
+- **Roof outline:** the roof edge visible in the image, with an agreed treatment of overhangs, carports, sheds and attached structures.
+- **Ground footprint:** where the building meets the ground. A roof mask alone cannot show this.
 
-Retain representative success and failure overlays locally, selected by a declared rule rather than only appearance. Public reporting can describe methods and aggregate results after checking their release scope. This workflow does not publish source imagery, real-location prompts, ground truth, or generated building vectors.
+Off-nadir lean, overhangs, shadows, trees and changes since the reference was made all cause honest disagreement between the two. Also write down how to handle courtyards, partly hidden buildings, the smallest building to include and uncertain cases. Never use the model being tested to draw reference outlines. Nearmap's documentation describes its Building Footprints generations 1 to 5 as roof outlines, and its fidelity score as agreement with its own prediction, not with ground truth.
+
+## 2. Fix the areas before tuning
+
+An area of interest (AOI) is the boundary within which results are scored. Use several separate AOIs that cover dense and sparse development, large and small roofs, different materials, trees and shadows, plus some areas with no buildings, so false detections show up.
+
+Outline **every** building inside an evaluation AOI; scattered examples are not a reference. Decide in advance how to treat buildings crossing the AOI's edge, and record any area left out and why.
+
+Split the AOIs by region into training, validation and test sets, and record the split before tuning. Training changes model weights; validation picks prompts, cut-offs, tile sizes and cleanup settings; the test set is scored once, with everything frozen. For a fair comparison every method uses the same imagery, bands, resolution, AOIs and outline convention. A vendor layer from another survey date is a different comparison and should be reported as one.
+
+## 3. Record the human input for each method
+
+| Method | Input beyond the image | Comparison group |
+| --- | --- | --- |
+| SAM 3 text | A fixed phrase such as `building` | Automatic, after picking the phrase on validation data |
+| SAM 3 example boxes | Positive and negative example boxes | Guided; report how many examples |
+| SAM 3 boxes or points | A box or points for each chosen building | Assisted; report selection and correction effort |
+| Fine-tuned SAM 3 | A locally trained checkpoint | A separate trained experiment |
+| Esri Mask R-CNN | A fixed model package and settings | Automatic |
+| Imported layer, such as Nearmap AI | An existing export | Imported product; no local model run |
+
+- **Text prompts.** Choose the phrase and cut-off on validation areas, then freeze them. Each tile starts fresh. Running several phrases or mixing text with boxes would be a different experiment.
+- **Example boxes** show the model what to look for in their own tile and can affect predictions anywhere in it; they don't restrict output to the boxed building. Tiles without a complete positive example are logged as skipped, and skipped areas must not count as processed.
+- **Boxes and points** outline a chosen building. If they come from the reference outlines, call the result *oracle-prompted*: it measures outline quality given the location, not detection. For a full assisted workflow, also count missed buildings and correction time.
+- **Fine-tuning** is a separate experiment. Run the pretrained model first, keep it as a control, choose the checkpoint on validation data and score once on the untouched test areas. Fine-tuning the concept detector does not adapt the box and point path. Native SAM 3 training needs Linux or WSL2 with an NVIDIA GPU.
+- **Esri's model.** Record the package version and hash and every setting (padding, threshold, tile size, batch size, duplicate suppression). Its published benchmark is not a result on your areas.
+- **Imported layers.** Keep the original file and its IDs, survey date, AI generation and scores, kept apart from scores of locally run models. Report it as an import, not a model run.
+
+## 4. Tile without losing the georeferencing
+
+Keep the original raster and record its CRS, transform, size, valid-data mask, bands, capture date, resolution and hash. Tile size and overlap are in pixels, so their ground size depends on the resolution: pick them on validation areas so that large roofs fit whole with some context. Too little overlap splits roofs; too much creates more duplicates and work. There is no universally right value.
+
+Each tile keeps its own transform, and masks are turned into polygons through it, never through coordinates guessed from file names. Check an overlay on the imagery before scaling up.
+
+## 5. Clean conservatively
+
+Raw per-tile outlines, duplicate removal and geometric cleanup are separate, recorded stages. In overlaps, prefer the complete copy of a building over one cut by a tile edge; confidence alone can favour the cut copy. Never dissolve every touching polygon: neighbouring buildings touch. Repair invalid geometry deliberately and log what was removed or split. Measure areas and tolerances in metres in a suitable projected CRS. Keep courtyard holes and separate building identities. Squaring off outlines is an opt-in treatment to test, not a default: curved and angled buildings are real.
+
+## 6. Score detection, shape and effort separately
+
+Freeze cut-offs, matching rules and cleanup settings before looking at test results. Match outlines to reference buildings one to one at a fixed IoU (intersection over union) threshold such as 0.5. Unmatched outlines are false positives (FP) and unmatched reference buildings false negatives (FN):
+
+- precision = TP / (TP + FP), the share of outlines that are right
+- recall = TP / (TP + FN), the share of buildings found
+- F1 = 2TP / (2TP + FP + FN), which balances the two
+
+Report the IoU of matched pairs for shape, alongside recall so that missed buildings stay visible, and mark undefined ratios rather than treating them as perfect. Report merges, splits and area bias, and break errors down by area and difficulty. Keep assisted and oracle-prompted results in their own groups, with their prompting effort, and record the time each stage took and on what hardware.
+
+**Record for every run:** run ID, method and repository commit; input hashes, capture date, CRS, resolution and AOI; reference version, outline convention and reviewer; model file, hash and upstream commit; environment, GPU and drivers; prompts, cut-offs, tile size and overlap; cleanup settings; and scoring settings and timings. Report a method that was not run as "Not run", never as a zero, and add rows for new variants instead of replacing poor results.
+
+## How the code enforces this
+
+- **Optimal one-to-one matching.** Outlines and reference buildings are matched for the most matches above the IoU threshold, then the highest total IoU, with SciPy's `linear_sum_assignment` on each group of overlapping shapes rather than one city-sized matrix. A test pins a case where greedy matching finds fewer. ([`evaluation.py`](../src/nearmap_buildings/evaluation.py))
+- **Georeferencing end to end.** Tiles keep the source CRS, transform and valid-data mask. Masks become polygons through each tile's own transform, keeping holes and keeping touching buildings apart. ([`preprocessing.py`](../src/nearmap_buildings/preprocessing.py), [`inference.py`](../src/nearmap_buildings/inference.py))
+- **Seam-aware duplicate removal.** Cleanup keeps outlines that touch neither a tile edge nor missing imagery before comparing scores, never merges neighbours, and records every removal. A building longer than a tile can be rejoined, but only where two cut pieces agree inside the strip both tiles saw. ([`postprocess.py`](../src/nearmap_buildings/postprocess.py))
+- **Traceable, resumable runs.** Tile, prompt, manifest and checkpoint hashes form a run signature. `--resume` refuses to continue after any change, and per-tile receipts with atomic writes make an interrupted run safe to pick up. ([`inference.py`](../src/nearmap_buildings/inference.py))
+- **Training data without leakage.** Splits come from drawn regions, never random tiles; overlapping or too-close splits and buildings crossing them are refused. Masks are COCO RLE, which keeps holes, plus `uint32` instance rasters that stay correct past 255 buildings per tile. ([`training.py`](../src/nearmap_buildings/training.py))
+- **Comparable by construction.** Reports carry fingerprints of the predictions, reference and AOI, and `nbf compare` refuses reports that differ. The per-building view also checks the reference's row order, since a re-sorted file would put each method's results on the wrong buildings. ([`compare.py`](../src/nearmap_buildings/compare.py))
+- **Safe defaults.** Model runs are dry runs until `--execute`, checkpoints load with `torch.load(weights_only=True)`, and commands never overwrite their inputs. Fine-tuned weights need an explicit export, because the inference loader would otherwise accept a training checkpoint while silently ignoring its weights.
+- **Real GIS machines.** `nbf` clears inherited `PROJ_LIB`, `PROJ_DATA` and `GDAL_DATA` for its own process, so a PostGIS install cannot override the projection database bundled with the wheels, while ArcPy keeps its own settings. ([`cli.py`](../src/nearmap_buildings/cli.py))
+
+## What has been tested
+
+Last updated October 2026. This records what has been run, not accuracy.
+
+**Run and passing**
+
+- The test suite, lint and a synthetic run of every CPU command, on Windows and Linux with Python 3.12, 3.13 and 3.14, on every push ([CI history](https://github.com/efkopru/nearmap-building-footprints/actions/workflows/cpu-tests.yml)). Package branch coverage was 81% when last measured. Deprecation warnings from this package fail the tests.
+- Geometry and raster handling: transforms, CRS, nodata, courtyard holes, touching buildings, IDs above 255, duplicate removal, regularization limits, one-to-one matching, AOI edge rules, empty inputs and split leakage.
+- All four SAM 3 modes against a fake model, which checks prompts, georeferencing and outputs but not the network itself.
+- Checkpoint export and loading with real PyTorch 2.10 on CPU, using a small stand-in model in SAM 3's layout: its weights survive export and load strictly into a fresh model.
+- Real imagery, held locally: SAM 3 with the official checkpoint (its published SHA-256 verified) on an RTX 4050 under WSL2, at a median 0.82 s per 1024 px tile and 5.8 GB peak memory, then across the whole of Lewisville; and Esri's model in ArcGIS Pro 3.7, on one area and then the whole city. The first real Esri run exposed a validation bug (multiband rasters were always rejected), now fixed and tested. The results are in [results/lewisville](../results/lewisville/README.md).
+- The [walkthrough notebooks](../notebooks/README.md), on the synthetic demo, with SAM 3 on the GPU and Esri's model in ArcGIS Pro.
+- Esri's 0–100 confidence scale, confirmed in the arcgis 2.4.3 source, and the training recipe and checkpoint conversion, reviewed against Meta's pinned code.
+
+**Not run yet**
+
+- Scoring against reference outlines reviewed for the 2026 imagery, so there are **no accuracy results** yet: the Lewisville scores are agreement with a 2015 map.
+- Fine-tuning on real data, and loading a really fine-tuned checkpoint.
+- Seam merging, `nbf agree` and the chunked Esri commands on the Lewisville imagery; they are covered by synthetic tests.
+- Any licensed Nearmap AI layer.
+
+The demo's predictions copy its reference outlines, so its perfect scores are expected by construction and are not SAM 3, Esri or Nearmap accuracy.
+
+## Sources
+
+Checked 2026-09-20. They describe upstream tools and requirements, not this project's results. SAM 3 is pinned to Meta's commit [`2345a4ad109ac29c569da749c91d84f10dc08c40`](https://github.com/facebookresearch/sam3/tree/2345a4ad109ac29c569da749c91d84f10dc08c40), and SamGeo separately to 1.4.2; record the versions you actually install.
+
+| Source | Used for |
+| --- | --- |
+| [Meta SAM 3 repository](https://github.com/facebookresearch/sam3) | Concept segmentation, model access, Python, PyTorch and CUDA requirements |
+| [Meta image prompting example](https://github.com/facebookresearch/sam3/blob/main/examples/sam3_image_predictor_example.ipynb) | Text prompts and positive and negative example boxes |
+| [Meta image processor](https://github.com/facebookresearch/sam3/blob/main/sam3/model/sam3_image_processor.py) | Text and box prompt formats and prompt state |
+| [Meta image model](https://github.com/facebookresearch/sam3/blob/main/sam3/model/sam3_image.py) and [instance predictor](https://github.com/facebookresearch/sam3/blob/main/sam3/model/sam1_task_predictor.py) | The separate path for boxes and points per building, and predicted mask quality |
+| [SamGeo 3 reference](https://samgeo.gishub.org/samgeo3/) and [SamGeo 1.4.2](https://pypi.org/project/segment-geospatial/1.4.2/) | The geospatial wrapper the adapter uses |
+| [Meta training guide](https://github.com/facebookresearch/sam3/blob/main/README_TRAIN.md) and [evaluation config](https://github.com/facebookresearch/sam3/blob/main/sam3/train/configs/eval_base.yaml) | Training setup, Hydra configs, CUDA and NCCL |
+| [Triton compatibility](https://github.com/triton-lang/triton#compatibility) and [NVIDIA CUDA on WSL](https://docs.nvidia.com/cuda/wsl-user-guide/index.html) | Why training needs Linux or WSL2, and the WSL2 driver setup |
+| [Esri Building Footprint Extraction – USA](https://doc.arcgis.com/en/pretrained-models/latest/imagery/introduction-to-building-footprint-extraction-usa.htm) | Model architecture and scope |
+| [Esri Detect Objects Using Deep Learning](https://doc.esri.com/en/arcgis-pro/latest/tool-reference/image-analyst/detect-objects-using-deep-learning.html) | Tool settings, duplicate suppression, append behaviour and licensing |
+| [Nearmap AI building footprints](https://help.nearmap.com/kb/articles/787-ai-pack-building-footprints) | Roof-outline meaning and the fidelity score |
+| [Rasterio transforms](https://rasterio.readthedocs.io/en/stable/topics/transforms.html) and [Shapely `make_valid`](https://shapely.readthedocs.io/en/stable/reference/shapely.make_valid.html) | Pixel-to-map transforms and geometry repair |
