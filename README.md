@@ -10,7 +10,7 @@
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/efkopru/nearmap-building-footprints/main/docs/images/how-it-works-dark.svg">
-  <img alt="How it works: an aerial image is cut into overlapping tiles, SAM 3 and Esri's model draw building outlines, and the outlines are cleaned and scored the same way for each model." src="https://raw.githubusercontent.com/efkopru/nearmap-building-footprints/main/docs/images/how-it-works.svg">
+  <img alt="How it works: an aerial image is cut into overlapping tiles, SAM 3 and Esri's model extract building outlines, and the outlines are cleaned and scored the same way for each model." src="https://raw.githubusercontent.com/efkopru/nearmap-building-footprints/main/docs/images/how-it-works.svg">
 </picture>
 
 ## Results: Lewisville, Texas
