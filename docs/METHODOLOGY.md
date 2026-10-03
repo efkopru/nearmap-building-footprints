@@ -29,24 +29,24 @@ An area of interest (AOI) is the boundary within which results are scored. Use s
 
 Outline **every** building inside an evaluation AOI; scattered examples are not a reference. Decide in advance how to treat buildings crossing the AOI's edge, and record any area left out and why.
 
-Split the AOIs by region into training, validation and test sets, and record the split before tuning. Training changes model weights; validation picks prompts, cut-offs, tile sizes and cleanup settings; the test set is scored once, with everything frozen. For a fair comparison every method uses the same imagery, bands, resolution, AOIs and outline convention. A vendor layer from another survey date is a different comparison and should be reported as one.
+Split the AOIs by region into training, validation and test sets, and record the split before tuning. Training changes model weights; validation picks prompts, confidence thresholds, tile sizes and cleanup settings; the test set is scored once, with everything frozen. For a fair comparison every method uses the same imagery, bands, resolution, AOIs and outline convention. A vendor layer from another survey date is a different comparison and should be reported as one.
 
 ## 3. Record the human input for each method
 
 | Method | Input beyond the image | Comparison group |
 | --- | --- | --- |
 | SAM 3 text | A fixed phrase such as `building` | Automatic, after picking the phrase on validation data |
-| SAM 3 example boxes | Positive and negative example boxes | Guided; report how many examples |
-| SAM 3 boxes or points | A box or points for each chosen building | Assisted; report selection and correction effort |
+| SAM 3 image exemplars | Positive and negative exemplar boxes | Guided; report how many exemplars |
+| SAM 3 box or point prompts | A box or points for each chosen building | Assisted; report selection and correction effort |
 | Fine-tuned SAM 3 | A locally trained checkpoint | A separate trained experiment |
 | Esri Mask R-CNN | A fixed model package and settings | Automatic |
 | Imported layer, such as Nearmap AI | An existing export | Imported product; no local model run |
 
-- **Text prompts.** Choose the phrase and cut-off on validation areas, then freeze them. Each tile starts fresh. Running several phrases or mixing text with boxes would be a different experiment.
-- **Example boxes** show the model what to look for in their own tile and can affect predictions anywhere in it; they don't restrict output to the boxed building. Tiles without a complete positive example are logged as skipped, and skipped areas must not count as processed.
-- **Boxes and points** outline a chosen building. If they come from the reference outlines, call the result *oracle-prompted*: it measures outline quality given the location, not detection. For a full assisted workflow, also count missed buildings and correction time.
+- **Text prompts.** Choose the phrase and confidence threshold on validation areas, then freeze them. Each tile starts fresh. Running several phrases or combining text with exemplars would be a different experiment.
+- **Image exemplars** are concept prompts: boxes that show the model what to look for in their own tile. They can affect predictions anywhere in it and don't restrict output to the boxed object. Tiles without a complete positive exemplar are logged as skipped, and skipped areas must not count as processed.
+- **Box and point prompts** are visual prompts that segment one chosen building, through SAM 3's interactive (SAM-style) path. If they come from the reference outlines, call the result *oracle-prompted*: it measures outline quality given the location, not detection. For a full assisted workflow, also count missed buildings and correction time.
 - **Fine-tuning** is a separate experiment. Run the pretrained model first, keep it as a control, choose the checkpoint on validation data and score once on the untouched test areas. Fine-tuning the concept detector does not adapt the box and point path. Native SAM 3 training needs Linux or WSL2 with an NVIDIA GPU.
-- **Esri's model.** Record the package version and hash and every setting (padding, threshold, tile size, batch size, duplicate suppression). Its published benchmark is not a result on your areas.
+- **Esri's model.** Record the package version and hash and every setting (padding, confidence threshold, tile size, batch size, non-maximum suppression). Its published benchmark is not a result on your areas.
 - **Imported layers.** Keep the original file and its IDs, survey date, AI generation and scores, kept apart from scores of locally run models. Report it as an import, not a model run.
 
 ## 4. Tile without losing the georeferencing
@@ -57,11 +57,11 @@ Each tile keeps its own transform, and masks are turned into polygons through it
 
 ## 5. Clean conservatively
 
-Raw per-tile outlines, duplicate removal and geometric cleanup are separate, recorded stages. In overlaps, prefer the complete copy of a building over one cut by a tile edge; confidence alone can favour the cut copy. Never dissolve every touching polygon: neighbouring buildings touch. Repair invalid geometry deliberately and log what was removed or split. Measure areas and tolerances in metres in a suitable projected CRS. Keep courtyard holes and separate building identities. Squaring off outlines is an opt-in treatment to test, not a default: curved and angled buildings are real.
+Raw per-tile outlines, duplicate removal and geometric cleanup are separate, recorded stages. In overlaps, prefer the complete copy of a building over one cut by a tile edge; confidence alone can favour the cut copy. Never dissolve every touching polygon: neighbouring buildings touch. Repair invalid geometry deliberately and log what was removed or split. Measure areas and tolerances in metres in a suitable projected CRS. Keep courtyard holes and separate building identities. Regularization, which squares off outlines, is an opt-in treatment to test, not a default: curved and angled buildings are real.
 
 ## 6. Score detection, shape and effort separately
 
-Freeze cut-offs, matching rules and cleanup settings before looking at test results. Match outlines to reference buildings one to one at a fixed IoU (intersection over union) threshold such as 0.5. Unmatched outlines are false positives (FP) and unmatched reference buildings false negatives (FN):
+Freeze confidence thresholds, matching rules and cleanup settings before looking at test results. Match outlines to reference buildings one to one at a fixed IoU (intersection over union) threshold such as 0.5. Unmatched outlines are false positives (FP) and unmatched reference buildings false negatives (FN):
 
 - precision = TP / (TP + FP), the share of outlines that are right
 - recall = TP / (TP + FN), the share of buildings found
@@ -69,7 +69,7 @@ Freeze cut-offs, matching rules and cleanup settings before looking at test resu
 
 Report the IoU of matched pairs for shape, alongside recall so that missed buildings stay visible, and mark undefined ratios rather than treating them as perfect. Report merges, splits and area bias, and break errors down by area and difficulty. Keep assisted and oracle-prompted results in their own groups, with their prompting effort, and record the time each stage took and on what hardware.
 
-**Record for every run:** run ID, method and repository commit; input hashes, capture date, CRS, resolution and AOI; reference version, outline convention and reviewer; model file, hash and upstream commit; environment, GPU and drivers; prompts, cut-offs, tile size and overlap; cleanup settings; and scoring settings and timings. Report a method that was not run as "Not run", never as a zero, and add rows for new variants instead of replacing poor results.
+**Record for every run:** run ID, method and repository commit; input hashes, capture date, CRS, resolution and AOI; reference version, outline convention and reviewer; model file, hash and upstream commit; environment, GPU and drivers; prompts, confidence thresholds, tile size and overlap; cleanup settings; and scoring settings and timings. Report a method that was not run as "Not run", never as a zero, and add rows for new variants instead of replacing poor results.
 
 ## How the code enforces this
 
@@ -112,13 +112,13 @@ Checked 2026-09-20. They describe upstream tools and requirements, not this proj
 | Source | Used for |
 | --- | --- |
 | [Meta SAM 3 repository](https://github.com/facebookresearch/sam3) | Concept segmentation, model access, Python, PyTorch and CUDA requirements |
-| [Meta image prompting example](https://github.com/facebookresearch/sam3/blob/main/examples/sam3_image_predictor_example.ipynb) | Text prompts and positive and negative example boxes |
+| [Meta image prompting example](https://github.com/facebookresearch/sam3/blob/main/examples/sam3_image_predictor_example.ipynb) | Text prompts and positive and negative image exemplars |
 | [Meta image processor](https://github.com/facebookresearch/sam3/blob/main/sam3/model/sam3_image_processor.py) | Text and box prompt formats and prompt state |
-| [Meta image model](https://github.com/facebookresearch/sam3/blob/main/sam3/model/sam3_image.py) and [instance predictor](https://github.com/facebookresearch/sam3/blob/main/sam3/model/sam1_task_predictor.py) | The separate path for boxes and points per building, and predicted mask quality |
+| [Meta image model](https://github.com/facebookresearch/sam3/blob/main/sam3/model/sam3_image.py) and [instance predictor](https://github.com/facebookresearch/sam3/blob/main/sam3/model/sam1_task_predictor.py) | The interactive path for box and point prompts, and predicted mask quality |
 | [SamGeo 3 reference](https://samgeo.gishub.org/samgeo3/) and [SamGeo 1.4.2](https://pypi.org/project/segment-geospatial/1.4.2/) | The geospatial wrapper the adapter uses |
 | [Meta training guide](https://github.com/facebookresearch/sam3/blob/main/README_TRAIN.md) and [evaluation config](https://github.com/facebookresearch/sam3/blob/main/sam3/train/configs/eval_base.yaml) | Training setup, Hydra configs, CUDA and NCCL |
 | [Triton compatibility](https://github.com/triton-lang/triton#compatibility) and [NVIDIA CUDA on WSL](https://docs.nvidia.com/cuda/wsl-user-guide/index.html) | Why training needs Linux or WSL2, and the WSL2 driver setup |
 | [Esri Building Footprint Extraction – USA](https://doc.arcgis.com/en/pretrained-models/latest/imagery/introduction-to-building-footprint-extraction-usa.htm) | Model architecture and scope |
-| [Esri Detect Objects Using Deep Learning](https://doc.esri.com/en/arcgis-pro/latest/tool-reference/image-analyst/detect-objects-using-deep-learning.html) | Tool settings, duplicate suppression, append behaviour and licensing |
+| [Esri Detect Objects Using Deep Learning](https://doc.esri.com/en/arcgis-pro/latest/tool-reference/image-analyst/detect-objects-using-deep-learning.html) | Tool settings, non-maximum suppression, append behaviour and licensing |
 | [Nearmap AI building footprints](https://help.nearmap.com/kb/articles/787-ai-pack-building-footprints) | Roof-outline meaning and the fidelity score |
 | [Rasterio transforms](https://rasterio.readthedocs.io/en/stable/topics/transforms.html) and [Shapely `make_valid`](https://shapely.readthedocs.io/en/stable/reference/shapely.make_valid.html) | Pixel-to-map transforms and geometry repair |

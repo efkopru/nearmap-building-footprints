@@ -1,41 +1,41 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="840" height="496" viewBox="0 0 840 496" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
 <rect x="0.5" y="0.5" width="839" height="495" rx="12" fill="#fcfcfb" stroke="#e1e0d9"/>
-<text x="32" y="44" font-size="21" font-weight="700" text-anchor="start" fill="#0b0b0b">Both models find 9 in 10 houses, but almost no sheds</text>
-<text x="32" y="70" font-size="14" font-weight="400" text-anchor="start" fill="#52514e">Share of the 38,882 buildings on Lewisville's 2015 map that each model also outlined</text>
+<text x="32" y="44" font-size="21" font-weight="700" text-anchor="start" fill="#0b0b0b">Both models find 9 in 10 large buildings, but few small ones</text>
+<text x="32" y="70" font-size="14" font-weight="400" text-anchor="start" fill="#52514e">Recall by building area: the share of the 38,882 buildings on Lewisville's 2015 map each model found</text>
 <rect x="32" y="91" width="14" height="14" rx="3" fill="#e34948"/>
-<text x="54" y="103" font-size="14" font-weight="400" text-anchor="start" fill="#52514e">Esri</text>
-<rect x="114.8" y="91" width="14" height="14" rx="3" fill="#2a78d6"/>
-<text x="136.8" y="103" font-size="14" font-weight="400" text-anchor="start" fill="#52514e">SAM 3</text>
+<text x="54" y="103" font-size="14" font-weight="400" text-anchor="start" fill="#52514e">Esri Mask R-CNN</text>
+<rect x="205" y="91" width="14" height="14" rx="3" fill="#2a78d6"/>
+<text x="227" y="103" font-size="14" font-weight="400" text-anchor="start" fill="#52514e">SAM 3</text>
 <line x1="300" y1="120" x2="300" y2="418" stroke="#898781" stroke-width="1"/>
 <text x="300" y="436" font-size="12" font-weight="400" text-anchor="middle" fill="#898781">0%</text>
 <line x1="520" y1="120" x2="520" y2="418" stroke="#e1e0d9" stroke-width="1"/>
 <text x="520" y="436" font-size="12" font-weight="400" text-anchor="middle" fill="#898781">50%</text>
 <line x1="740" y1="120" x2="740" y2="418" stroke="#e1e0d9" stroke-width="1"/>
 <text x="740" y="436" font-size="12" font-weight="400" text-anchor="middle" fill="#898781">100%</text>
-<text x="32" y="143" font-size="15" font-weight="600" text-anchor="start" fill="#0b0b0b">Houses and larger</text>
-<text x="32" y="163" font-size="13" font-weight="400" text-anchor="start" fill="#898781">100 m² and up · 26,959 buildings</text>
+<text x="32" y="143" font-size="15" font-weight="600" text-anchor="start" fill="#0b0b0b">100 m² and up</text>
+<text x="32" y="163" font-size="13" font-weight="400" text-anchor="start" fill="#898781">26,959 buildings</text>
 <path d="M300 128h410.719a4 4 0 0 1 4 4v10a4 4 0 0 1 -4 4h-410.719z" fill="#e34948"/>
 <text x="722.719" y="142" font-size="13" font-weight="600" text-anchor="start" fill="#0b0b0b">94%</text>
 <path d="M300 150h391.705a4 4 0 0 1 4 4v10a4 4 0 0 1 -4 4h-391.705z" fill="#2a78d6"/>
 <text x="703.705" y="164" font-size="13" font-weight="600" text-anchor="start" fill="#0b0b0b">90%</text>
-<text x="32" y="219" font-size="15" font-weight="600" text-anchor="start" fill="#0b0b0b">Small buildings</text>
-<text x="32" y="239" font-size="13" font-weight="400" text-anchor="start" fill="#898781">50–100 m² · 1,710 buildings</text>
+<text x="32" y="219" font-size="15" font-weight="600" text-anchor="start" fill="#0b0b0b">50–100 m²</text>
+<text x="32" y="239" font-size="13" font-weight="400" text-anchor="start" fill="#898781">1,710 buildings</text>
 <path d="M300 204h226.55a4 4 0 0 1 4 4v10a4 4 0 0 1 -4 4h-226.55z" fill="#e34948"/>
 <text x="538.55" y="218" font-size="13" font-weight="600" text-anchor="start" fill="#0b0b0b">52%</text>
 <path d="M300 226h168.14a4 4 0 0 1 4 4v10a4 4 0 0 1 -4 4h-168.14z" fill="#2a78d6"/>
 <text x="480.14" y="240" font-size="13" font-weight="600" text-anchor="start" fill="#0b0b0b">39%</text>
-<text x="32" y="295" font-size="15" font-weight="600" text-anchor="start" fill="#0b0b0b">Garages and big sheds</text>
-<text x="32" y="315" font-size="13" font-weight="400" text-anchor="start" fill="#898781">20–50 m² · 2,346 buildings</text>
+<text x="32" y="295" font-size="15" font-weight="600" text-anchor="start" fill="#0b0b0b">20–50 m²</text>
+<text x="32" y="315" font-size="13" font-weight="400" text-anchor="start" fill="#898781">2,346 buildings</text>
 <path d="M300 280h32.3853a4 4 0 0 1 4 4v10a4 4 0 0 1 -4 4h-32.3853z" fill="#e34948"/>
 <text x="344.385" y="294" font-size="13" font-weight="600" text-anchor="start" fill="#0b0b0b">8%</text>
 <path d="M300 302h104.218a4 4 0 0 1 4 4v10a4 4 0 0 1 -4 4h-104.218z" fill="#2a78d6"/>
 <text x="416.218" y="316" font-size="13" font-weight="600" text-anchor="start" fill="#0b0b0b">25%</text>
-<text x="32" y="371" font-size="15" font-weight="600" text-anchor="start" fill="#0b0b0b">Garden sheds</text>
-<text x="32" y="391" font-size="13" font-weight="400" text-anchor="start" fill="#898781">under 20 m² · 7,867 buildings</text>
+<text x="32" y="371" font-size="15" font-weight="600" text-anchor="start" fill="#0b0b0b">Under 20 m²</text>
+<text x="32" y="391" font-size="13" font-weight="400" text-anchor="start" fill="#898781">7,867 buildings</text>
 <rect x="300" y="356" width="0.11186" height="18" rx="0" fill="#e34948"/>
 <text x="308.112" y="370" font-size="13" font-weight="600" text-anchor="start" fill="#0b0b0b">0%</text>
 <path d="M300 378h10.9333a4 4 0 0 1 4 4v10a4 4 0 0 1 -4 4h-10.9333z" fill="#2a78d6"/>
 <text x="322.933" y="392" font-size="13" font-weight="600" text-anchor="start" fill="#0b0b0b">3%</text>
-<text x="32" y="468" font-size="12" font-weight="400" text-anchor="start" fill="#898781">Whole city, May 2026 imagery. The map is older than the imagery, so this measures</text>
-<text x="32" y="485" font-size="12" font-weight="400" text-anchor="start" fill="#898781">agreement with it, not accuracy. Esri: the city's own run of Esri's model.</text>
+<text x="32" y="468" font-size="12" font-weight="400" text-anchor="start" fill="#898781">Whole city, May 2026 imagery. The map is older than the imagery, so this is agreement, not accuracy.</text>
+<text x="32" y="485" font-size="12" font-weight="400" text-anchor="start" fill="#898781">Esri Mask R-CNN: the city's run of Esri's Building Footprint Extraction – USA model.</text>
 </svg>
