@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 RESULTS = ROOT / "results" / "lewisville"
 FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif"
 
-# Esri is red, SAM 3 blue and "found by both" violet in every chart. The pairs pass the
+# Esri's Mask R-CNN is red, SAM 3 blue and "found by both" violet in every chart. The pairs pass the
 # dataviz palette checks (colour-blind separation and contrast) on both surfaces.
 THEMES = {
     "light": dict(surface="#fcfcfb", border="#e1e0d9", card="#f3f2ee", ink="#0b0b0b", ink2="#52514e",
@@ -28,9 +28,10 @@ THEMES = {
                  missed="#46463f", on_color="#0b0b0b"),
 }
 
-# The 2015 map's size classes, largest first, with a plain-language name for each.
-SIZES = [("100 m² and up", "Houses and larger"), ("50–100 m²", "Small buildings"),
-         ("20–50 m²", "Garages and big sheds"), ("under 20 m²", "Garden sheds")]
+# Area classes of the 2015 outlines, largest first, as named in citywide_by_size.csv.
+SIZES = ["100 m² and up", "50–100 m²", "20–50 m²", "under 20 m²"]
+ESRI = "Esri Mask R-CNN"
+ESRI_NOTE = "Esri Mask R-CNN: the city's run of Esri's Building Footprint Extraction – USA model."
 
 
 class Svg:
@@ -94,7 +95,7 @@ def grouped_bars(t, title, subtitle, rows, note):
     height = bottom + 44 + 17 * len(note)
     svg = Svg(840, height, t)
     svg.header(title, subtitle)
-    svg.legend(102, [("Esri", t["esri"]), ("SAM 3", t["sam3"])])
+    svg.legend(102, [(ESRI, t["esri"]), ("SAM 3", t["sam3"])])
     for share in (0, 0.5, 1):
         x = x0 + full * share
         svg.line(x, top - 8, x, bottom, t["grid"] if share else t["muted"])
@@ -116,48 +117,49 @@ def found_by_size(t):
     rows = read_csv("citywide_by_size.csv", "size")
     total = sum(int(r["outlines_2015"]) for r in rows.values())
     data = []
-    for size, name in SIZES:
+    for size in SIZES:
         r = rows[size]
         n = int(r["outlines_2015"])
-        data.append((name, f"{size} · {n:,} buildings",
+        data.append((size.capitalize(), f"{n:,} buildings",
                      int(r["found_by_esri_city"]) / n, int(r["found_by_sam3"]) / n))
     return grouped_bars(
-        t, "Both models find 9 in 10 houses, but almost no sheds",
-        f"Share of the {total:,} buildings on Lewisville's 2015 map that each model also outlined",
-        data, ["Whole city, May 2026 imagery. The map is older than the imagery, so this measures",
-               "agreement with it, not accuracy. Esri: the city's own run of Esri's model."])
+        t, "Both models find 9 in 10 large buildings, but few small ones",
+        f"Recall by building area: the share of the {total:,} buildings on Lewisville's 2015 map each model found",
+        data, ["Whole city, May 2026 imagery. The map is older than the imagery, so this is agreement, not accuracy.",
+               ESRI_NOTE])
 
 
 def test_area(t):
     rows = read_csv("test_area_scores.csv", "method")
     esri, sam3 = rows["Esri, city run"], rows["SAM 3"]
-    n = int(esri["reference_main"])
+    n = int(esri["reference_20_m2_and_up"])
 
-    def matched(r):
+    def precision(r):
         return int(r["tp"]) / (int(r["tp"]) + int(r["fp"]))
-    data = [("Buildings found", f"of the {n} on the 2015 map", int(esri["tp"]) / n, int(sam3["tp"]) / n),
-            ("Outlines that match the map", "the rest may be new buildings or mistakes", matched(esri), matched(sam3))]
+    data = [("Recall", f"buildings found, of {n} on the 2015 map", int(esri["tp"]) / n, int(sam3["tp"]) / n),
+            ("Precision", "outlines that match the 2015 map", precision(esri), precision(sam3))]
     return grouped_bars(
-        t, "On a hidden test area, both find more than 9 in 10 buildings",
-        "A 700 m square kept aside until the settings were frozen, then scored once",
-        data, ["Buildings of 20 m² and up. SAM 3 draws more outlines that the 2015 map lacks."])
+        t, "On the held-out test area, both models find over 9 in 10 buildings",
+        "A 700 m square set aside until the settings were frozen, then scored once",
+        data, ["Buildings of 20 m² and up. SAM 3 draws more outlines the 2015 map lacks; some may be new buildings.",
+               ESRI_NOTE])
 
 
 def outcomes(t):
     rows = read_csv("citywide_by_size.csv", "size")
     x0, full, top, step = 300, 500, 128, 52
-    height = top + step * len(SIZES) + 40
+    height = top + step * len(SIZES) + 57
     svg = Svg(840, height, t)
-    svg.header("Most houses are found by both models; most sheds by neither",
-               "What happened to each building on Lewisville's 2015 map, by size")
-    keys = [("Found by both", "esri_city_and_sam3", t["both"]), ("Only Esri", "only_esri_city", t["esri"]),
+    svg.header("Both models find most large buildings; neither finds most small ones",
+               "What happened to each building on Lewisville's 2015 map, by building area")
+    keys = [("Found by both", "esri_city_and_sam3", t["both"]), (f"Only {ESRI}", "only_esri_city", t["esri"]),
             ("Only SAM 3", "only_sam3", t["sam3"]), ("Missed by both", "missed_by_esri_city_and_sam3", t["missed"])]
     svg.legend(102, [(name, color) for name, _, color in keys])
-    for i, (size, name) in enumerate(SIZES):
+    for i, size in enumerate(SIZES):
         r, y = rows[size], top + step * i
         n = int(r["outlines_2015"])
-        svg.text(32, y + 14, name, 15, weight=600)
-        svg.text(32, y + 32, size, 13, t["muted"])
+        svg.text(32, y + 14, size.capitalize(), 15, weight=600)
+        svg.text(32, y + 32, f"{n:,} buildings", 13, t["muted"])
         x = x0
         for _, key, color in keys:
             w = full * int(r[key]) / n
@@ -167,8 +169,9 @@ def outcomes(t):
                 ink = t["ink"] if color == t["missed"] else t["on_color"]
                 svg.text(x + 8, y + 20, f"{int(r[key]) / n:.0%}", 13, ink, weight=600)
             x += w
-    svg.text(32, height - 18, "Whole city, May 2026 imagery. Some buildings missed by both were demolished after 2015.",
+    svg.text(32, height - 35, "Whole city, May 2026 imagery. Some buildings missed by both were demolished after 2015.",
              12, t["muted"])
+    svg.text(32, height - 18, ESRI_NOTE, 12, t["muted"])
     return svg
 
 
@@ -199,8 +202,8 @@ def icon_score(svg, x, y, t):
 def how_it_works(t):
     steps = [(icon_image, "Aerial image", ["A GeoTIFF or VRT,", "never changed"]),
              (icon_tiles, "Cut into tiles", ["Overlap adds context", "at tile edges"]),
-             (icon_outlines, "Extract outlines", ["SAM 3 and Esri's", "building model"]),
-             (icon_score, "Clean and score", ["Same rules and same", "map for each model"])]
+             (icon_outlines, "Extract outlines", ["SAM 3 and Esri's", "Mask R-CNN model"]),
+             (icon_score, "Clean and score", ["Same rules and same", "map for each method"])]
     pad, gap, card_h = 20, 28, 160
     width = 880
     card_w = (width - 2 * pad - 3 * gap) / 4

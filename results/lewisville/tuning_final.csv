@@ -1,4 +1,4 @@
-method,prompt,tile_px,threshold,regularize,tp,fp,fn,precision,recall,f1,median_iou,shed_recall,sheds
+method,prompt,tile_px,threshold,regularize,tp,fp,fn,precision,recall,f1,median_iou,recall_under_20_m2,reference_under_20_m2
 SAM 3,building,1024,0.3,off,141,346,105,0.2895,0.5732,0.3847,0.7235,0.137,73
 SAM 3,building,1024,0.3,on,141,346,105,0.2895,0.5732,0.3847,0.7235,0.137,73
 SAM 3,building,1024,0.4,off,141,308,105,0.314,0.5732,0.4058,0.727,0.137,73
