@@ -85,7 +85,7 @@ Tested on Windows and Linux with Python 3.12 to 3.14. Not done yet: fine-tuning,
 | `docs/` | The [usage guide](https://github.com/efkopru/nearmap-building-footprints/blob/main/docs/USAGE.md), the [methodology](https://github.com/efkopru/nearmap-building-footprints/blob/main/docs/METHODOLOGY.md) and the charts |
 | `notebooks/` | [Step-by-step walkthroughs](https://github.com/efkopru/nearmap-building-footprints/blob/main/notebooks/README.md) on the demo data |
 | `results/lewisville/` | The [Lewisville results](https://github.com/efkopru/nearmap-building-footprints/blob/main/results/lewisville/README.md), their CSV files and the PDF report |
-| `configs/`, `scripts/` | Example run settings, setup scripts and the chart maker |
+| `configs/`, `scripts/` | Example run settings, setup scripts, the chart maker and the PDF report maker |
 
 Your imagery and results go in `data/` and `outputs/`, which git ignores.
 
