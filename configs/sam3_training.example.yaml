@@ -93,7 +93,7 @@ trainer:
         img_folder: ${paths.dataset_root}/val/images
         ann_file: ${paths.dataset_root}/val/annotations.json
   # Retain upstream box-monitoring metrics on validation only.
-  # Run footprint/mask evaluation separately on the untouched test split.
+  # Score building outlines separately (nbf evaluate) on the untouched test split.
   meters:
     val:
       roboflow100:

@@ -4,32 +4,32 @@
 ![Python 3.12 | 3.13 | 3.14](https://img.shields.io/badge/Python-3.12%20%7C%203.13%20%7C%203.14-3776AB?logo=python&logoColor=white)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/efkopru/nearmap-building-footprints/blob/main/LICENSE)
 
-**Turn an aerial image into building outlines, then check fairly how well each AI model did.**
+**Turn an aerial image into building outlines with deep learning, then check fairly how well each method did.**
 
-`nbf` is a Python command-line tool for GIS work. It runs Meta's SAM 3 and Esri's building model on the same imagery, cleans up their outlines with the same rules, and scores them against the same reference map.
+`nbf` is a Python command-line tool for GIS work. It runs two deep learning models, Meta's SAM 3 and Esri's Mask R-CNN building model, on the same imagery, cleans up their outlines with the same rules, and scores them against the same reference outlines.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/efkopru/nearmap-building-footprints/main/docs/images/how-it-works-dark.svg">
-  <img alt="How it works: an aerial image is cut into overlapping tiles, SAM 3 and Esri's model extract building outlines, and the outlines are cleaned and scored the same way for each model." src="https://raw.githubusercontent.com/efkopru/nearmap-building-footprints/main/docs/images/how-it-works.svg">
+  <img alt="How it works: an aerial image is cut into overlapping tiles, SAM 3 and Esri's Mask R-CNN model extract building outlines, and the outlines are cleaned and scored the same way for each method." src="https://raw.githubusercontent.com/efkopru/nearmap-building-footprints/main/docs/images/how-it-works.svg">
 </picture>
 
 ## Results: Lewisville, Texas
 
-Both models ran on Nearmap's May 2026 imagery of the whole city of Lewisville, Texas, at 10 cm per pixel. Their outlines were compared with the city's own map of 38,882 buildings. That map is from 2015, so the numbers show how well each model agrees with it, not true accuracy.
+Both models ran on Nearmap's May 2026 imagery of the whole city of Lewisville, Texas, at 10 cm per pixel. Their outlines were compared with the city's own 38,882 building outlines. Those date from 2015, so the scores measure agreement with them, not accuracy.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/efkopru/nearmap-building-footprints/main/docs/images/found-by-size-dark.svg">
-  <img alt="Bar chart: share of the 2015 map's buildings each model found. 100 m² and up: Esri 94%, SAM 3 90%. 50 to 100 m²: Esri 52%, SAM 3 39%. 20 to 50 m²: Esri 8%, SAM 3 25%. Under 20 m²: Esri 0%, SAM 3 3%." src="https://raw.githubusercontent.com/efkopru/nearmap-building-footprints/main/docs/images/found-by-size.svg">
+  <img alt="Bar chart of recall by building area, the share of the 2015 outlines each model found. 100 m² and up: Esri Mask R-CNN 94%, SAM 3 90%. 50 to 100 m²: 52% and 39%. 20 to 50 m²: 8% and 25%. Under 20 m²: 0% and 3%." src="https://raw.githubusercontent.com/efkopru/nearmap-building-footprints/main/docs/images/found-by-size.svg">
 </picture>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/efkopru/nearmap-building-footprints/main/docs/images/test-area-dark.svg">
-  <img alt="Bar chart for the test area: Esri found 94% of the 471 buildings and SAM 3 91%. 97% of Esri's outlines match the map, and 82% of SAM 3's." src="https://raw.githubusercontent.com/efkopru/nearmap-building-footprints/main/docs/images/test-area.svg">
+  <img alt="Bar chart for the held-out test area. Recall: Esri Mask R-CNN 94% and SAM 3 91% of the 471 buildings. Precision: 97% and 82%." src="https://raw.githubusercontent.com/efkopru/nearmap-building-footprints/main/docs/images/test-area.svg">
 </picture>
 
-- **Houses and larger buildings:** both models find about 9 in 10. Esri finds slightly more.
-- **Sheds:** both miss almost all of them, although SAM 3 finds more small buildings than Esri.
-- **New buildings:** SAM 3 draws more outlines that the 2015 map lacks. About 4,900 of them are also drawn by Esri, so many are likely buildings built since 2015.
+- **Buildings of 100 m² and up:** both models find about 9 in 10 (recall 0.94 for Esri's model, 0.90 for SAM 3).
+- **Small structures:** both miss almost all of those under 20 m². Between 20 and 50 m², SAM 3 finds more than Esri's model.
+- **Likely new buildings:** SAM 3 draws more outlines that have no 2015 match. About 4,900 of them are also drawn by Esri's model, so many are probably buildings built since 2015.
 
 The [full results](https://github.com/efkopru/nearmap-building-footprints/blob/main/results/lewisville/README.md) have every number, and the [PDF report](https://github.com/efkopru/nearmap-building-footprints/blob/main/results/lewisville/Lewisville_building_footprint_comparison.pdf) shows both models on the imagery.
 
@@ -69,12 +69,12 @@ The demo's "predictions" are copies of its reference outlines, so the perfect sc
 
 ## What's inside
 
-- **Seven ways to get outlines:** SAM 3 with a text prompt, example boxes, one box per building or points; a fine-tuned SAM 3; Esri's model in ArcGIS Pro; or an existing layer such as Nearmap AI.
+- **Seven methods:** SAM 3 with a text prompt, image exemplars, or a box or points per building; a fine-tuned SAM 3; Esri's Mask R-CNN model in ArcGIS Pro; or an imported layer such as Nearmap AI.
 - **Reduce tile-edge errors:** tiles overlap, and cleanup prefers complete outlines over cut copies. Buildings longer than a tile can still be split.
-- **Fair scoring:** each building matches at most one outline, and reports made against different reference maps refuse to be compared.
+- **Fair scoring:** one-to-one matching, so each reference building matches at most one outline, and reports made against different references refuse to be compared.
 - **Traceable results:** hashes link every outline to the pixels, prompts and model weights that made it, and interrupted runs resume safely.
 
-Tested on Windows and Linux with Python 3.12 to 3.14. Not done yet: fine-tuning, and scoring against a map checked against the 2026 imagery, which is the true accuracy test. The [methodology](https://github.com/efkopru/nearmap-building-footprints/blob/main/docs/METHODOLOGY.md) explains the design and what has been tested.
+Tested on Windows and Linux with Python 3.12 to 3.14. Not done yet: fine-tuning, and scoring against reference outlines reviewed against the 2026 imagery, which is the true accuracy test. The [methodology](https://github.com/efkopru/nearmap-building-footprints/blob/main/docs/METHODOLOGY.md) explains the design and what has been tested.
 
 ## Project layout
 

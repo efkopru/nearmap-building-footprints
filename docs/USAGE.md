@@ -99,14 +99,14 @@ Each run writes `run.json` and, per tile, `raw/<tile>.gpkg` with a JSON receipt.
 
 ### Prompt files for the guided modes
 
-Three modes take a single-layer GeoJSON or GeoPackage drawn in QGIS or ArcGIS. Coordinates are map coordinates in the file's own CRS, not tile pixels; the tool reprojects them to each tile.
+SAM 3 takes two kinds of prompt. *Concept prompts*, a text phrase or image exemplars, ask for every matching object in the tile. *Visual prompts*, a box or points, ask for one particular object. Three modes take a single-layer GeoJSON or GeoPackage drawn in QGIS or ArcGIS. Coordinates are map coordinates in the file's own CRS, not tile pixels; the tool reprojects them to each tile.
 
 | Mode | Geometry | Attributes | What it does |
 | --- | --- | --- | --- |
 | `text` | none | none | One phrase, such as `building`, applied to every tile. |
-| `exemplar` | boxes (polygons) | `label`: 1 for a good example, 0 for a bad one; default 1 | Finds other objects in the same tile that look like the positive examples. |
-| `box` | boxes (polygons) | all positive | Outlines the one building in each box; finds nothing outside the boxes. |
-| `point` | points | `object_id`, and `label` 1 (inside) or 0 (outside) | Points sharing an `object_id` outline one building. Each group needs a positive point. |
+| `exemplar` | boxes (polygons) | `label`: 1 for a positive exemplar, 0 for a negative one; default 1 | Image exemplars: finds every object in the same tile that matches the positive exemplars and not the negative ones. |
+| `box` | boxes (polygons) | all positive | Segments the one building in each box; finds nothing outside the boxes. |
+| `point` | points | `object_id`, and `label` 1 (foreground) or 0 (background) | Points sharing an `object_id` segment one building. Each group needs a foreground point. |
 
 ```bash
 nbf infer --manifest data/prepared/pilot01/manifest.json --method exemplar --prompts data/prompts/exemplars.gpkg --checkpoint models/sam3.pt --output outputs/exemplar_pilot01 --execute
@@ -114,19 +114,19 @@ nbf infer --manifest data/prepared/pilot01/manifest.json --method box --prompts 
 nbf infer --manifest data/prepared/pilot01/manifest.json --method point --prompts data/prompts/points.gpkg --checkpoint models/sam3.pt --output outputs/point_pilot01 --execute
 ```
 
-Only boxes and point groups that fit wholly inside a tile are used, and examples only apply to their own tile. A tile without a complete positive prompt is recorded as `skipped_no_complete_positive_prompt`, which is different from a tile where the model found nothing, so check `run.json` before treating a run as complete coverage. Text and exemplar prompts run separately; they are not combined. The box and point modes' score is predicted mask quality, not the text detector's confidence, so tune cut-offs for each mode on its own. `nbf demo` writes example prompt files to look at. Report how many prompts you placed: guided results are not comparable with fully automatic ones.
+Only boxes and point groups that fit wholly inside a tile are used, and exemplars only apply to their own tile. A tile without a complete positive prompt is recorded as `skipped_no_complete_positive_prompt`, which is different from a tile where the model found nothing, so check `run.json` before treating a run as complete coverage. Text and exemplar prompts run separately; they are not combined. In the box and point modes the score is SAM 3's predicted mask quality (an IoU estimate), not a detection confidence, so tune score thresholds for each mode on its own. `nbf demo` writes example prompt files to look at. Report how many prompts you placed: guided results are not comparable with fully automatic ones.
 
 ## 5. Run Esri's model
 
 ### One raster
 
-Use a clone of ArcGIS Pro's Python environment with Image Analyst and Esri's deep learning libraries, and download the Building Footprint Extraction – USA package (`.dlpk`) yourself. It expects orthorectified 8-bit RGB at about 10 to 40 cm per pixel. ([Esri's instructions](https://doc.arcgis.com/en/pretrained-models/latest/imagery/using-building-footprint-extraction-usa.htm))
+Use a clone of ArcGIS Pro's Python environment with Image Analyst and Esri's deep learning libraries, and download the Building Footprint Extraction – USA model package (`.dlpk`), a Mask R-CNN instance segmentation model, yourself. It expects orthorectified 8-bit RGB at about 10 to 40 cm per pixel. ([Esri's instructions](https://doc.arcgis.com/en/pretrained-models/latest/imagery/using-building-footprint-extraction-usa.htm))
 
 ```powershell
 & 'C:\path\to\arcgis-clone\python.exe' src/nearmap_buildings/esri.py --raster data/imagery/aoi.tif --model 'C:\models\BuildingFootprintExtractionUSA.dlpk' --output 'C:\analysis\results.gdb\esri_buildings'
 ```
 
-This prints the call; add `--execute` to run it. Create the geodatabase first and use a new feature class name, because Esri's tool appends to an existing one. Options: `--threshold`, `--batch-size` (a perfect square), `--padding`, `--processor CPU|GPU` and `--gpu-id`. The runner calls `arcpy.ia.DetectObjectsUsingDeepLearning` with polygon output, `NO_NMS` and no regularization, and checks the band count, pixel type and CRS before it starts.
+This prints the call; add `--execute` to run it. Create the geodatabase first and use a new feature class name, because Esri's tool appends to an existing one. Options: `--threshold`, `--batch-size` (a perfect square), `--padding`, `--processor CPU|GPU` and `--gpu-id`. The runner calls `arcpy.ia.DetectObjectsUsingDeepLearning` with polygon output, `NO_NMS` (no non-maximum suppression, so the shared cleanup handles overlapping detections) and no regularization, and checks the band count, pixel type and CRS before it starts.
 
 ### A whole city in chunks
 
@@ -141,7 +141,7 @@ nbf clean --input outputs/esri_city/raw.gpkg --output outputs/esri_city/cleaned.
 
 - **plan** writes a small VRT per chunk. Each chunk has a core that no other core overlaps, plus `--overlap` pixels on every side to provide context for buildings near a core's edge. Buildings extending beyond that overlap can still be cut. A source that marks missing imagery with a mask or alpha band is refused; give it a nodata value and tile it again.
 - **run** prints the ArcGIS command; add `--execute` to start. It runs `--per-process` chunks in one ArcGIS Pro Python process (`--arcgis-python`), then starts a fresh one. Each finished chunk leaves a done-marker, so rerunning the same command resumes. Use a separate `--done` folder and `--gdb` for each plan. The run stops after `--max-failures` processes in a row fail without finishing a chunk.
-- **merge** keeps each detection only in the chunk whose core holds it, so nothing is counted twice. `--min-score` applies a frozen confidence cut-off, and `source_id` (`<chunk>:<OBJECTID>`) finds any outline again in ArcGIS Pro.
+- **merge** keeps each detection only in the chunk whose core holds it, so nothing is counted twice. `--min-score` applies a frozen confidence threshold, and `source_id` (`<chunk>:<OBJECTID>`) finds any outline again in ArcGIS Pro.
 
 Lewisville took 150 chunks of 10,240 px with 512 px overlap and 8 h 46 min of model time on an RTX 4050.
 
@@ -209,13 +209,13 @@ nbf compare --reports outputs/text_pilot01/evaluation.json outputs/esri_run01/ev
 
 `nbf compare` refuses reports made with different references, AOIs or settings, and never mixes agreement-only reports with independent ones. If every report was made with the same `--size-bins-m2`, `--by-size FILE` adds a table by size class. `--per-building` writes one row per reference building with an `outcome` such as `found by both`, `only esri` or `missed by both`; style it in GIS to see where the methods disagree. It first checks that the reference file still has the same rows in the same order (pass `--reference` if it has moved). The demo's `esri_format_predictions.gdb` lets you try this whole sequence without ArcGIS.
 
-**Compare two models without a reference.** When the reference is old, two models agreeing is the most useful signal:
+**Compare two methods without a reference.** When the reference is old, two models agreeing is the most useful signal:
 
 ```bash
 nbf agree --predictions outputs/text_pilot01/cleaned.gpkg outputs/esri_run01/cleaned.gpkg --layers cleaned cleaned --labels sam3_text esri --reports outputs/text_pilot01/evaluation.json outputs/esri_run01/evaluation.json --aoi data/reference/test_aoi.gpkg --metric-crs EPSG:32614 --output-json outputs/agreement.json --output-gpkg outputs/agreement.gpkg
 ```
 
-It matches the two methods' outlines one to one and writes `both` and `only_<label>` layers. With evaluation reports (`--reports`, or `-` for a method without one) it also lists `candidate_new`: outlines both models drew that the reference lacks, most likely new buildings. Review them before using any as labels; two models can make the same mistake.
+It matches the two methods' outlines one to one and writes `both` and `only_<label>` layers. With evaluation reports (`--reports`, or `-` for a method without one) it also lists `candidate_new`: outlines both methods drew that the reference lacks, most likely new buildings. Review them before using any as labels; two methods can make the same mistake.
 
 **Turn an old map into a real reference.** An outdated map becomes an independent reference only after a person checks every outline in the AOI against the imagery, adding, removing and correcting buildings. Do that in GIS on a copy, never by copying model output, then check what changed:
 
