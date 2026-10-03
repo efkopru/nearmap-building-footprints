@@ -65,7 +65,10 @@ def tile(source, output, tile_size=1024, overlap=128, bands=(1, 2, 3), min_valid
                 tile_id = f"r{int(window.row_off):08d}_c{int(window.col_off):08d}"
                 name = f"tiles/{tile_id}.tif"
                 transform = src.window_transform(window)
-                profile = dict(driver="GTiff", width=int(window.width), height=int(window.height), count=3, dtype="uint8", crs=src.crs, transform=transform, compress="deflate")
+                # 256 px blocks with a horizontal predictor make city tiles about a third smaller
+                # than row strips; level 1 is as small as the default here and threads keep it fast.
+                profile = dict(driver="GTiff", width=int(window.width), height=int(window.height), count=3, dtype="uint8", crs=src.crs, transform=transform,
+                               compress="deflate", predictor=2, zlevel=1, tiled=True, blockxsize=256, blockysize=256, num_threads="ALL_CPUS")
                 rgb = src.read(list(bands), window=window)
                 rgb[:, ~valid] = 0
                 with rasterio.open(output / name, "w", **profile) as dst:

@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="840" height="327" viewBox="0 0 840 327" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+<rect x="0.5" y="0.5" width="839" height="326" rx="12" fill="#fcfcfb" stroke="#e1e0d9"/>
+<text x="32" y="44" font-size="21" font-weight="700" text-anchor="start" fill="#0b0b0b">On a hidden test area, both find more than 9 in 10 buildings</text>
+<text x="32" y="70" font-size="14" font-weight="400" text-anchor="start" fill="#52514e">A 700 m square kept aside until the settings were frozen, then scored once</text>
+<rect x="32" y="91" width="14" height="14" rx="3" fill="#e34948"/>
+<text x="54" y="103" font-size="14" font-weight="400" text-anchor="start" fill="#52514e">Esri</text>
+<rect x="114.8" y="91" width="14" height="14" rx="3" fill="#2a78d6"/>
+<text x="136.8" y="103" font-size="14" font-weight="400" text-anchor="start" fill="#52514e">SAM 3</text>
+<line x1="300" y1="120" x2="300" y2="266" stroke="#898781" stroke-width="1"/>
+<text x="300" y="284" font-size="12" font-weight="400" text-anchor="middle" fill="#898781">0%</text>
+<line x1="520" y1="120" x2="520" y2="266" stroke="#e1e0d9" stroke-width="1"/>
+<text x="520" y="284" font-size="12" font-weight="400" text-anchor="middle" fill="#898781">50%</text>
+<line x1="740" y1="120" x2="740" y2="266" stroke="#e1e0d9" stroke-width="1"/>
+<text x="740" y="284" font-size="12" font-weight="400" text-anchor="middle" fill="#898781">100%</text>
+<text x="32" y="143" font-size="15" font-weight="600" text-anchor="start" fill="#0b0b0b">Buildings found</text>
+<text x="32" y="163" font-size="13" font-weight="400" text-anchor="start" fill="#898781">of the 471 on the 2015 map</text>
+<path d="M300 128h411.711a4 4 0 0 1 4 4v10a4 4 0 0 1 -4 4h-411.711z" fill="#e34948"/>
+<text x="723.711" y="142" font-size="13" font-weight="600" text-anchor="start" fill="#0b0b0b">94%</text>
+<path d="M300 150h397.699a4 4 0 0 1 4 4v10a4 4 0 0 1 -4 4h-397.699z" fill="#2a78d6"/>
+<text x="709.699" y="164" font-size="13" font-weight="600" text-anchor="start" fill="#0b0b0b">91%</text>
+<text x="32" y="219" font-size="15" font-weight="600" text-anchor="start" fill="#0b0b0b">Outlines that match the map</text>
+<text x="32" y="239" font-size="13" font-weight="400" text-anchor="start" fill="#898781">the rest may be new buildings or mistakes</text>
+<path d="M300 204h420.729a4 4 0 0 1 4 4v10a4 4 0 0 1 -4 4h-420.729z" fill="#e34948"/>
+<text x="732.729" y="218" font-size="13" font-weight="600" text-anchor="start" fill="#0b0b0b">97%</text>
+<path d="M300 226h358.452a4 4 0 0 1 4 4v10a4 4 0 0 1 -4 4h-358.452z" fill="#2a78d6"/>
+<text x="670.452" y="240" font-size="13" font-weight="600" text-anchor="start" fill="#0b0b0b">82%</text>
+<text x="32" y="316" font-size="12" font-weight="400" text-anchor="start" fill="#898781">Buildings of 20 m² and up. SAM 3 draws more outlines that the 2015 map lacks.</text>
+</svg>
