@@ -30,6 +30,22 @@ def test_overlap_preserves_pixels_crs_and_coverage(raster, tmp_path):
     with pytest.raises(FileExistsError):
         tile(raster, output)
 
+def test_tiles_are_block_tiled_with_predictor_and_keep_the_mask(tmp_path):
+    path = tmp_path / "source.tif"
+    data = np.random.default_rng(0).integers(1, 256, (3, 300, 300), dtype=np.uint8)
+    valid = np.ones((300, 300), dtype=bool)
+    valid[:, :40] = False
+    with rasterio.open(path, "w", driver="GTiff", width=300, height=300, count=3, dtype="uint8", crs="EPSG:32614", transform=from_origin(1, 400, 1, 1)) as dst:
+        dst.write(data)
+        dst.write_mask(valid.astype(np.uint8) * 255)
+    manifest = tile(path, tmp_path / "tiles", tile_size=300, overlap=0)
+    with rasterio.open(tmp_path / "tiles" / manifest["tiles"][0]["path"]) as part:
+        assert part.compression.name == "deflate"
+        assert part.tags(ns="IMAGE_STRUCTURE").get("PREDICTOR") == "2"
+        assert part.block_shapes[0] == (256, 256)
+        np.testing.assert_array_equal(part.dataset_mask() > 0, valid)
+        np.testing.assert_array_equal(part.read(), np.where(valid, data, 0))
+
 @pytest.mark.parametrize("width", [1100, 1920, 2000, 5000])
 def test_edge_windows_stay_full_size_with_at_least_the_requested_overlap(width):
     tiles = list(windows(width, 1024, 1024, 128))

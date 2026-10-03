@@ -10,10 +10,8 @@ htmlcov/
 *.egg-info/
 build/
 dist/
-data/*
-!data/README.md
-outputs/*
-!outputs/README.md
+/data/
+/outputs/
 models/
 .env
 .env.*

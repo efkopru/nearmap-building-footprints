@@ -177,7 +177,7 @@ def parser():
     p.add_argument("--manifest", type=Path, required=True)
     p.add_argument("--method", choices=METHODS, default="text")
     p.add_argument("--text", default="building")
-    p.add_argument("--prompts", type=Path, help="Single-layer GeoJSON/GPKG; see docs/PROMPTS.md")
+    p.add_argument("--prompts", type=Path, help="Single-layer GeoJSON/GPKG; see docs/USAGE.md")
     p.add_argument("--output", type=Path, required=True)
     p.add_argument("--checkpoint", type=Path)
     p.add_argument("--bpe-path", type=Path)
