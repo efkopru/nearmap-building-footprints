@@ -121,4 +121,4 @@ SAM 3 used up to 96% of the GPU's memory, close to the limit but stable through 
 2. **For small structures:** fine-tune a model on labelled structures under 20 m²; none of these methods finds them.
 3. **For large buildings:** merge outlines across tile seams, or use larger tiles in commercial areas.
 
-**Files:** [citywide_scores.csv](citywide_scores.csv), [citywide_by_size.csv](citywide_by_size.csv), [test_area_scores.csv](test_area_scores.csv), [old_town_scores.csv](old_town_scores.csv), [old_town_by_size.csv](old_town_by_size.csv), [tuning_final.csv](tuning_final.csv) and the [tuning protocol](tuning_protocol.md).
+**Files:** [citywide_scores.csv](citywide_scores.csv), [citywide_by_size.csv](citywide_by_size.csv), [test_area_scores.csv](test_area_scores.csv), [old_town_scores.csv](old_town_scores.csv), [old_town_by_size.csv](old_town_by_size.csv), [tuning_final.csv](tuning_final.csv) and the [tuning protocol](tuning_protocol.md). The PDF is printed from the private report page with [`scripts/make_report_pdf.py`](../../scripts/make_report_pdf.py).
