@@ -1,3 +1,5 @@
+from copy import deepcopy
+import hashlib
 import json
 
 import geopandas as gpd
@@ -232,3 +234,133 @@ def test_an_input_size_class_field_is_only_reserved_when_size_bins_are_used():
     assert evaluate(reference, reference, aoi(), crs=CRS).report["f1"] == 1.0
     with pytest.raises(ValueError, match="reserved"):
         evaluate(reference, reference, aoi(), crs=CRS, size_bins=[20])
+
+
+def test_minimum_area_rematches_the_cohort_instead_of_reusing_cross_threshold_pairs():
+    reference = frame([box(0, 0, 3.8, 5), box(10, 0, 14.2, 5)])  # 19, 21 m2
+    predictions = frame([box(0, 0, 4.2, 5), box(10, 0, 13.8, 5)])  # 21, 19 m2
+    all_sizes = evaluate(predictions, reference, aoi(), crs=CRS, size_bins=[20]).report
+    result = evaluate(predictions, reference, aoi(), crs=CRS, size_bins=[20], min_area_m2=20)
+    assert all_sizes["size_thresholds"][0]["f1"] == 1.0  # Diagnostic of global matching.
+    assert (result.report["true_positives"], result.report["false_positives"], result.report["false_negatives"]) == (0, 1, 1)
+    assert result.report["f1"] == 0.0
+    assert result.report["size_thresholds"][0]["f1"] == 0.0
+    assert result.report["area_excluded_counts"] == {"predictions": 1, "reference": 1}
+    assert result.layers["area_excluded_predictions"].eval_id.tolist() == [1]
+    assert result.layers["area_excluded_reference"].eval_id.tolist() == [0]
+
+
+def test_minimum_area_keeps_exact_cutoff_source_ids_and_fingerprints():
+    source = frame([box(0, 0, 3, 3), box(200, 200, 210, 210), box(10, 0, 14, 5), box(30, 0, 40, 10)])
+    baseline = evaluate(source, source, aoi(), crs=CRS).report
+    result = evaluate(source, source, aoi(), crs=CRS, min_area_m2=20)
+    assert result.report["evaluated_reference_ids"] == result.report["evaluated_prediction_ids"] == [2, 3]
+    assert [(match["prediction_id"], match["reference_id"]) for match in result.report["matches"]] == [(2, 2), (3, 3)]
+    assert result.report["excluded_counts"] == {"predictions": {"outside": 1}, "reference": {"outside": 1}}
+    assert result.report["area_excluded_counts"] == {"predictions": 1, "reference": 1}
+    assert result.report["input_counts"] == {"predictions": 4, "reference": 4}
+    assert result.report["min_area_m2"] == 20.0
+    assert result.report["min_area_filter_stage"] == "after_aoi_before_matching"
+    for key in ("reference_fingerprint", "predictions_fingerprint", "reference_order_fingerprint", "predictions_order_fingerprint", "aoi_fingerprint"):
+        assert result.report[key] == baseline[key]
+    assert source.area.tolist() == [9.0, 100.0, 20.0, 100.0]
+
+
+def test_minimum_area_uses_metric_units_after_aoi_clipping():
+    source = frame([box(8, 0, 16, 5), box(1, 1, 5, 6), box(20, 20, 25, 25)])
+    result = evaluate(source, source, frame([box(0, 0, 10, 10)]), crs=CRS, edge_policy="clip", min_area_m2=20)
+    assert result.report["evaluated_reference_ids"] == [1]  # 20 m2 exactly remains.
+    assert result.layers["area_excluded_reference"].eval_id.tolist() == [0]
+    assert result.layers["area_excluded_reference"].area.tolist() == [10.0]  # Original was 40 m2.
+    assert result.layers["area_excluded_reference"].aoi_action.tolist() == ["clipped"]
+    assert result.report["area_excluded_counts"]["reference"] == 1
+    assert result.report["excluded_counts"]["reference"] == {"outside": 1}
+    assert source.area.tolist() == [40.0, 20.0, 25.0]
+    # In feet the small polygon is larger than 20 square feet, but remains below 20 m2.
+    feet = frame([box(0, 0, 3, 3), box(10, 0, 18, 5)]).to_crs("EPSG:2276")
+    metric = evaluate(feet, feet, aoi(), crs=CRS, min_area_m2=20).report
+    assert metric["evaluated_reference_ids"] == [1]
+
+
+@pytest.mark.parametrize("minimum", [0, -1, float("nan"), float("inf"), True, "20"])
+def test_invalid_minimum_area_is_refused(minimum):
+    with pytest.raises(ValueError, match="min_area_m2"):
+        evaluate(frame([]), frame([]), aoi(), crs=CRS, min_area_m2=minimum)
+
+
+def review_receipt(reference, area):
+    return {"schema_version": 1, "ready_for_evaluation": True, "edge_policy": "exclude",
+            "reviewed_fingerprint": geometry_fingerprint(reference), "aoi_fingerprint": geometry_fingerprint(area),
+            "provenance": {"reviewer": "Test Reviewer", "review_date": "2026-10-15", "imagery_date": "2026-05",
+                           "label_convention": "roof outlines from 4 m2", "coverage_complete": True, "independent_review": True}}
+
+
+@pytest.mark.parametrize("section,key,value", [
+    (None, "schema_version", 2), (None, "schema_version", True), (None, "ready_for_evaluation", False), (None, "edge_policy", "clip"),
+    (None, "reviewed_fingerprint", "a" * 64), (None, "aoi_fingerprint", "b" * 64),
+    ("provenance", "reviewer", ""), ("provenance", "reviewer", "REVIEWER"),
+    ("provenance", "reviewer", "ACTUAL_REVIEWER"),
+    ("provenance", "review_date", "2026-02-30"), ("provenance", "review_date", "20261015"),
+    ("provenance", "imagery_date", "2026-13"), ("provenance", "label_convention", None),
+    ("provenance", "coverage_complete", False), ("provenance", "independent_review", "true"),
+])
+def test_review_receipt_rejects_unready_unbound_or_unattested_reviews(section, key, value):
+    source, area = frame([box(0, 0, 10, 10)]), aoi()
+    receipt = review_receipt(source, area)
+    (receipt if section is None else receipt[section])[key] = value
+    with pytest.raises(ValueError, match="review receipt"):
+        evaluate(source, source, area, crs=CRS, review_receipt=receipt)
+
+
+def test_review_receipt_accepts_bound_attestations_but_not_agreement_or_clipping():
+    source, area = frame([box(0, 0, 10, 10)]), aoi()
+    receipt = review_receipt(source, area)
+    before = deepcopy(receipt)
+    report = evaluate(source, source, area, crs=CRS, min_area_m2=20, review_receipt=receipt).report
+    assert report["review_receipt"] == receipt == before
+    assert report["f1"] == 1.0
+    for kwargs in ({"reference_status": "agreement_only"}, {"edge_policy": "clip"}):
+        with pytest.raises(ValueError, match="review receipt"):
+            evaluate(source, source, area, crs=CRS, review_receipt=receipt, **kwargs)
+
+
+def test_cli_minimum_area_writes_audit_layers_and_records_the_validated_receipt(tmp_path):
+    source, area = frame([box(0, 0, 3, 3), box(10, 0, 14, 5)]), aoi()
+    source_path, area_path = tmp_path / "buildings.gpkg", tmp_path / "aoi.gpkg"
+    source.to_file(source_path)
+    area.to_file(area_path)
+    receipt_path = tmp_path / "review.json"
+    receipt_path.write_text(json.dumps(review_receipt(source, area)), encoding="utf-8")
+    output, layers = tmp_path / "metrics.json", tmp_path / "metrics.gpkg"
+    args = ["--predictions", str(source_path), "--reference", str(source_path), "--aoi", str(area_path),
+            "--metric-crs", CRS, "--independent-holdout", "--min-area-m2", "20", "--review-receipt", str(receipt_path),
+            "--output-json", str(output), "--output-gpkg", str(layers)]
+    main(args)
+    report = json.loads(output.read_text(encoding="utf-8"))
+    assert report["review_receipt"]["sha256"] == hashlib.sha256(receipt_path.read_bytes()).hexdigest()
+    assert report["review_receipt"]["path"] == str(receipt_path.resolve())
+    assert report["evaluated_reference_ids"] == [1]
+    assert gpd.read_file(layers, layer="area_excluded_reference").eval_id.tolist() == [0]
+    before = receipt_path.read_bytes()
+    with pytest.raises(SystemExit):
+        main([*args[:args.index("--output-json")], "--output-json", str(receipt_path), "--overwrite"])
+    assert receipt_path.read_bytes() == before
+
+
+@pytest.mark.parametrize("invalid", ["missing_attestation", "null", "[]"])
+def test_cli_invalid_receipt_does_not_create_outputs(tmp_path, invalid):
+    source, area = frame([box(0, 0, 10, 10)]), aoi()
+    source_path, area_path = tmp_path / "source.gpkg", tmp_path / "aoi.gpkg"
+    source.to_file(source_path)
+    area.to_file(area_path)
+    receipt = review_receipt(source, area)
+    receipt["provenance"]["independent_review"] = False
+    path = tmp_path / "review.json"
+    path.write_text(json.dumps(receipt) if invalid == "missing_attestation" else invalid, encoding="utf-8")
+    output = tmp_path / "metrics.json"
+    layers = tmp_path / "metrics.gpkg"
+    with pytest.raises(ValueError, match="review receipt"):
+        main(["--predictions", str(source_path), "--reference", str(source_path), "--aoi", str(area_path),
+              "--metric-crs", CRS, "--independent-holdout", "--review-receipt", str(path),
+              "--output-json", str(output), "--output-gpkg", str(layers)])
+    assert not output.exists() and not layers.exists()

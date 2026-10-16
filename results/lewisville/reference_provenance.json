@@ -1,0 +1,439 @@
+{
+  "schema": "lewisville-reference-provenance-v1",
+  "snapshot_id": "lewisville-reference-f564806fe971556560022459a3997d26b6b860a72884d78a5b8c41dcc5f417b2",
+  "audit_kind": "Local snapshot and stored-result audit; no network acquisition or model inference",
+  "fingerprint_method": "sha256-normalized-wkb-source-crs-v1",
+  "row_order_fingerprint_method": "sha256-normalized-wkb-source-crs-row-order-v1",
+  "id_hash_definition": "SHA-256 of ordered integer IDs encoded as compact ASCII JSON",
+  "source": {
+    "service_layer_url": "https://services2.arcgis.com/kXGqZY4GIOcEYxoF/arcgis/rest/services/3D_Buildings_082020/FeatureServer/0",
+    "layer_id": 0,
+    "export_coordinate_crs": "EPSG:2276",
+    "retrieved_at": null,
+    "query_parameters": null,
+    "server_filter": null,
+    "service_item_revision_at_retrieval": null,
+    "license_at_retrieval": null,
+    "authoritative_outline_convention": null,
+    "unknown_fields_reason": "Not recorded in the inspected export or adjacent local metadata; not inferred from filenames or the current live service",
+    "collection_date_interpretation": "Year_Colle has Pre_2015, 2015 and missing values; the service name's 082020 is not a feature collection date"
+  },
+  "files": {
+    "source_geojson": {
+      "filename": "reference_2015_outlines_source.geojson",
+      "sha256": "500603b7636a469084b42053e372cd9a496233bbafcb8befb5e7fb0702dc1796",
+      "count": 38924,
+      "crs": "EPSG:2276",
+      "geometry_fingerprint": "ae30e47ea9de61b8ec90f1ff218c3a041fe389c50e9c8ae4445aa26b7e81c335",
+      "row_order_fingerprint": "2ca2beb0a583c35d70e9d2fb7feb0673cb685da98c10cbe828e6c778ba106624",
+      "invalid_geometries": 1,
+      "year_colle_counts": {
+        "2015": 3898,
+        "Pre_2015": 34993,
+        "unknown": 33
+      },
+      "objectid_order_sha256": "cf82cbe07ad52b17e8b3eb96d49c1a30c9f9d7b65aee411a0f5b69f8efd54229"
+    },
+    "source_geopackage": {
+      "filename": "reference_2015_outlines_source.gpkg",
+      "sha256": "56e5e585cc55f48c9462db27866aed14b7645516d3e7c11aa3af3b8ac9f8e797",
+      "count": 38924,
+      "crs": "EPSG:2276",
+      "geometry_fingerprint": "ae30e47ea9de61b8ec90f1ff218c3a041fe389c50e9c8ae4445aa26b7e81c335",
+      "row_order_fingerprint": "2ca2beb0a583c35d70e9d2fb7feb0673cb685da98c10cbe828e6c778ba106624",
+      "invalid_geometries": 1,
+      "year_colle_counts": {
+        "2015": 3898,
+        "Pre_2015": 34993,
+        "unknown": 33
+      },
+      "objectid_order_sha256": "cf82cbe07ad52b17e8b3eb96d49c1a30c9f9d7b65aee411a0f5b69f8efd54229"
+    },
+    "normalized_geopackage": {
+      "filename": "reference_2015_outlines.gpkg",
+      "sha256": "d29c8ebe2e84783b6881324ab767cbd4365aa8039a339a08cdbdd21cf475bffa",
+      "count": 38924,
+      "crs": "EPSG:2276",
+      "geometry_fingerprint": "f564806fe971556560022459a3997d26b6b860a72884d78a5b8c41dcc5f417b2",
+      "row_order_fingerprint": "7bf07aec08acf461ff2a211938d617a11722bf39c1c7ebfbb3cf00ec7a273a2d",
+      "invalid_geometries": 0,
+      "year_colle_counts": {
+        "2015": 3898,
+        "Pre_2015": 34993,
+        "unknown": 33
+      },
+      "objectid_order_sha256": "cf82cbe07ad52b17e8b3eb96d49c1a30c9f9d7b65aee411a0f5b69f8efd54229"
+    }
+  },
+  "normalization": {
+    "same_objectids_in_same_order": true,
+    "retained_attributes_unchanged": true,
+    "retained_fields": [
+      "OBJECTID",
+      "Year_Colle",
+      "FEATURE_TY",
+      "Class",
+      "BLDGHEIGHT"
+    ],
+    "removed_fields": [
+      "BuildingFID",
+      "BuildingFID_1",
+      "BuildingDe",
+      "BuildingNu",
+      "Type",
+      "created_user",
+      "created_date",
+      "last_edited_user",
+      "last_edited_date",
+      "Inactive",
+      "FacilityID",
+      "ParcelID",
+      "ORIG_FID",
+      "EAVEHEIGHT",
+      "ROOFFORM",
+      "BASEELEV",
+      "ROOFDIR",
+      "RoofDirAdjust"
+    ],
+    "unchanged_geometries": 38923,
+    "changed_geometries": 1,
+    "changed_objectids_sha256": "71d40b84d06ee136cca495984facf79c3ecde3e1093f098fcad6926a8609ab59",
+    "normalized_equals_make_valid_of_source": true,
+    "historical_transformation_command": null,
+    "evidence_limit": "This proves the observed transformation, not which historical command performed it; attribute reduction and one geometry repair are consistent with the inspected files"
+  },
+  "city_evaluation_reference": {
+    "crs_for_area_and_scoring": "EPSG:26914",
+    "edge_policy": "exclude",
+    "iou_threshold": 0.5,
+    "source_count": 38924,
+    "evaluated_count": 38882,
+    "excluded_counts": {
+      "crossing_excluded": 29,
+      "outside": 13
+    },
+    "evaluated_year_colle_counts": {
+      "2015": 3882,
+      "Pre_2015": 34967,
+      "unknown": 33
+    },
+    "evaluated_objectid_order_sha256": "a918b75f9b007cddaa2b85033cce56b60ca490531a1f0f829d7b0519d9bc84a5",
+    "evaluated_zero_based_row_ids_sha256": "834a1bd570405e9050e75c0b88b26e41e2da3c778ba5c7c0a15f983de146041a",
+    "aoi_fingerprint": "b20b1b862cfe417e61ddcd4e92a1d9ed30017ed37deb40d46d07b58c02c54235",
+    "all_three_historical_reports_reference_and_id_checks_pass": true
+  },
+  "review_subsets": {
+    "old_town": {
+      "subset_filename": "reference_2015_subset.gpkg",
+      "subset_sha256": "68dae19acabe8293e55305adbe39b8684ce75ed3d0be2bcb036e895c693dd17f",
+      "touching_count": 341,
+      "scored_count": 319,
+      "scored_reference_at_least_20_m2": 246,
+      "touching_objectid_order_sha256": "4951dc3e02f2eee80c56cf28920c7d6cec71a18403a3552cc7b8285d7460d96b",
+      "scored_objectid_order_sha256": "9f5bbe6789273473db4e26e5bf8830d717023444b3551a61b484f42cd2e57585",
+      "aoi_fingerprint": "4c1b8aead02c7320f0c7740727343971daa783da6e206e395f80c14ae06f2145",
+      "scored_year_colle_counts": {
+        "2015": 33,
+        "Pre_2015": 263,
+        "unknown": 23
+      }
+    },
+    "test_area": {
+      "subset_filename": "reference_2015_subset.gpkg",
+      "subset_sha256": "6d22292d388b9c86ad144ba6300a33926f501163cfa1b6aa0932a2df206f10bc",
+      "touching_count": 647,
+      "scored_count": 607,
+      "scored_reference_at_least_20_m2": 471,
+      "touching_objectid_order_sha256": "bac42f0083ac0f283cb6a8a4ee873c621da577f819c6cc4fc1d8846291c2d760",
+      "scored_objectid_order_sha256": "89a0dde9447bdc688b2932276b7b24c7c6682d4bc80bc6c0eee0a72132e5737c",
+      "aoi_fingerprint": "391a71266bf131b1673a47b7554f2423ea96c55b8bfe34b22d9ecfc8cc893a01",
+      "scored_year_colle_counts": {
+        "2015": 39,
+        "Pre_2015": 568
+      }
+    }
+  },
+  "result_csvs": [
+    {
+      "path": "citywide_scores.csv",
+      "sha256": "42a70a1ef1b37155510a40dd0001fa800dcea5f04c2208cedbb8af896a1dfb5e",
+      "rows": 6,
+      "reference_snapshot_id": "lewisville-reference-f564806fe971556560022459a3997d26b6b860a72884d78a5b8c41dcc5f417b2",
+      "reference_link_evidence": "City evaluation report fingerprints and stored matching rows; >=20 counts numerically reconstructed"
+    },
+    {
+      "path": "citywide_by_size.csv",
+      "sha256": "8bc577227ee3d81619de69c799ba7ab7504a15391855e7c7b136f3c4ed2760b1",
+      "rows": 4,
+      "reference_snapshot_id": "lewisville-reference-f564806fe971556560022459a3997d26b6b860a72884d78a5b8c41dcc5f417b2",
+      "reference_link_evidence": "Associated historical city summary; this audit does not regenerate every size-class row"
+    },
+    {
+      "path": "test_area_scores.csv",
+      "sha256": "a6fbc2210799de9b82e8cb83f348a1c697b3dff60572a31d46b4e70e656dcbc6",
+      "rows": 3,
+      "reference_snapshot_id": "lewisville-reference-f564806fe971556560022459a3997d26b6b860a72884d78a5b8c41dcc5f417b2",
+      "reference_link_evidence": "Stored test receipt and fresh geometric matching on the recorded test AOI"
+    },
+    {
+      "path": "old_town_scores.csv",
+      "sha256": "7bf202be39b1702d2e02150b762da2813425c90634c92e6bdec5bfe7b74450c4",
+      "rows": 3,
+      "reference_snapshot_id": "lewisville-reference-f564806fe971556560022459a3997d26b6b860a72884d78a5b8c41dcc5f417b2",
+      "reference_link_evidence": "Published CSV carries the reference geometry fingerprint"
+    },
+    {
+      "path": "old_town_by_size.csv",
+      "sha256": "35d7b9a130edcd90595df6003f84801951468fdee1148f8f3d3687f4d4015383",
+      "rows": 9,
+      "reference_snapshot_id": "lewisville-reference-f564806fe971556560022459a3997d26b6b860a72884d78a5b8c41dcc5f417b2",
+      "reference_link_evidence": "Associated documented Old Town inventory comparison; this audit does not regenerate every size-class row"
+    },
+    {
+      "path": "tuning_final.csv",
+      "sha256": "32482948c62dbb2fc2b3fef18c11f8b4fa0ab6cca05b86f694cacb3b39aaa7eb",
+      "rows": 176,
+      "reference_snapshot_id": "lewisville-reference-f564806fe971556560022459a3997d26b6b860a72884d78a5b8c41dcc5f417b2",
+      "reference_link_evidence": "Matches local tuning receipt after column renaming/rounding; no per-variant reference fingerprints were retained"
+    }
+  ],
+  "historical_scoring_audit": {
+    "notebook_baseline": {
+      "path": "../../notebooks/04_score_and_compare.ipynb",
+      "commit": "09adb7362162888187d7f750412cf057a4cd8512",
+      "git_blob_sha256": "bb67c819f6645a0010dc59fca50bb3a9bdc5d49ab077f7d2c9d22c086e13d7f0",
+      "finding": "The baseline synthetic score function had no area filter; the later explicit >=20 correction does not establish historical real-data execution"
+    },
+    "methods": {
+      "esri_city": {
+        "label": "Esri, city run",
+        "evaluation_receipt_sha256": "56ef99731b47f80e0142a738850221f3fe059727f363dc313c97c50162704ddf",
+        "predictions_file_sha256": "b27465f805e722a0391dbf39e2331992e3ccd8c689f9ba6f692db992d508b304",
+        "predictions_geometry_fingerprint": "bfddbe844e74e0a9c2aeb72ea97437eb38abb171372e449b2131fb0bd23c1971",
+        "stored_match_ious_verified_against_current_rows": true,
+        "city_historical_at_least_20_reconstruction": {
+          "tp": 26496,
+          "fp": 6011,
+          "fn": 4519,
+          "precision": 0.8150859814809118,
+          "recall": 0.8542963082379493,
+          "f1": 0.8342306602436951
+        },
+        "city_global_matches_by_area": {
+          "prediction_and_reference_at_least_20": 26496,
+          "prediction_at_least_20_reference_under_20": 0,
+          "prediction_under_20_reference_at_least_20": 4,
+          "both_under_20": 2
+        },
+        "test_historical_at_least_20_reconstruction": {
+          "tp": 445,
+          "fp": 16,
+          "fn": 26,
+          "precision": 0.96529284164859,
+          "recall": 0.9447983014861996,
+          "f1": 0.9549356223175965
+        },
+        "test_filter_both_before_matching_comparison": {
+          "tp": 445,
+          "fp": 16,
+          "fn": 26,
+          "precision": 0.96529284164859,
+          "recall": 0.9447983014861996,
+          "f1": 0.9549356223175965
+        }
+      },
+      "sam3_city": {
+        "label": "SAM 3",
+        "evaluation_receipt_sha256": "448ddac1760d1f0ea4647795de2dfc3f540534ea41dc32d0b2736c929b9b30ef",
+        "predictions_file_sha256": "4ee59ccec681065d859b570d13f04a1219d0fa4b84fce3ecb4ea2f94744f23ae",
+        "predictions_geometry_fingerprint": "da1e448b3c03e115c565c51ea2f27fdc31157ed3e261aa4aaaffad9b98339393",
+        "stored_match_ious_verified_against_current_rows": true,
+        "city_historical_at_least_20_reconstruction": {
+          "tp": 25482,
+          "fp": 11990,
+          "fn": 5533,
+          "precision": 0.6800277540563621,
+          "recall": 0.8216024504272127,
+          "f1": 0.7441412238819046
+        },
+        "city_global_matches_by_area": {
+          "prediction_and_reference_at_least_20": 25482,
+          "prediction_at_least_20_reference_under_20": 129,
+          "prediction_under_20_reference_at_least_20": 9,
+          "both_under_20": 138
+        },
+        "test_historical_at_least_20_reconstruction": {
+          "tp": 430,
+          "fp": 92,
+          "fn": 41,
+          "precision": 0.8237547892720306,
+          "recall": 0.9129511677282378,
+          "f1": 0.8660624370594159
+        },
+        "test_filter_both_before_matching_comparison": {
+          "tp": 430,
+          "fp": 92,
+          "fn": 41,
+          "precision": 0.8237547892720306,
+          "recall": 0.9129511677282378,
+          "f1": 0.8660624370594159
+        }
+      },
+      "esri_local_city": {
+        "label": "Esri, local raw run",
+        "evaluation_receipt_sha256": "e7d5a28ed4744805e0eec25ea2a846efe1c0148088169ab7126ed5572724af65",
+        "predictions_file_sha256": "7611e78972479f7922c31773fd8daa68531b11070772dc70e4e1a487c93a7d8b",
+        "predictions_geometry_fingerprint": "3ad20c888928b2107023a5190622a44cfe590109f0a71fe56b37ea3b91aec28f",
+        "stored_match_ious_verified_against_current_rows": true,
+        "city_historical_at_least_20_reconstruction": {
+          "tp": 26107,
+          "fp": 11025,
+          "fn": 4908,
+          "precision": 0.7030862867607455,
+          "recall": 0.8417539900048364,
+          "f1": 0.7661966043993133
+        },
+        "city_global_matches_by_area": {
+          "prediction_and_reference_at_least_20": 26107,
+          "prediction_at_least_20_reference_under_20": 12,
+          "prediction_under_20_reference_at_least_20": 77,
+          "both_under_20": 340
+        },
+        "test_historical_at_least_20_reconstruction": {
+          "tp": 422,
+          "fp": 30,
+          "fn": 49,
+          "precision": 0.9336283185840708,
+          "recall": 0.8959660297239915,
+          "f1": 0.914409534127844
+        },
+        "test_filter_both_before_matching_comparison": {
+          "tp": 422,
+          "fp": 30,
+          "fn": 49,
+          "precision": 0.9336283185840708,
+          "recall": 0.8959660297239915,
+          "f1": 0.914409534127844
+        }
+      }
+    },
+    "tuning_receipts": {
+      "local_csv_sha256": "1511999e9d47820a858f7c80401cfc3488e552a8d38dfda5d6207d0b4eb2426d",
+      "public_rows": 176,
+      "local_rows": 176,
+      "public_csv_matches_local_after_column_renaming_and_rounding": true,
+      "frozen_settings_sha256": "c387fbad7ef570e91467df64c2477cf58e05042f7dce0dea7d14a8bfc3344c3b",
+      "frozen_result_counts": {
+        "Esri city run": {
+          "tp": 135,
+          "fp": 62,
+          "fn": 111
+        },
+        "Esri local": {
+          "tp": 122,
+          "fp": 95,
+          "fn": 124
+        },
+        "SAM 3": {
+          "tp": 129,
+          "fp": 115,
+          "fn": 117
+        }
+      },
+      "inference_runs": [
+        {
+          "run_name": "sam3_building_1024",
+          "sha256": "a5106828d593f13feb17c0006ec4f0ab07feb400ea73b2bd7fead8816b52a9eb",
+          "status": "complete",
+          "prompt": "building",
+          "inference_confidence": 0.3,
+          "tile_count": 81,
+          "manifest_sha256": "8cd7b93c987aa66b434edf307a9b64cf804c1290379bc3aaadcb00eea218a93a",
+          "checkpoint_sha256": "9999e2341ceef5e136daa386eecb55cb414446a00ac2b55eb2dfd2f7c3cf8c9e"
+        },
+        {
+          "run_name": "sam3_building_1536",
+          "sha256": "6a194785daee95371e8693420c11127c23e186ae76a85f534973a920c038de51",
+          "status": "complete",
+          "prompt": "building",
+          "inference_confidence": 0.3,
+          "tile_count": 36,
+          "manifest_sha256": "1e6f53b53c78737b14b6d5be3223960f24fc3d32cce528f0bfab6bb64795bdcc",
+          "checkpoint_sha256": "9999e2341ceef5e136daa386eecb55cb414446a00ac2b55eb2dfd2f7c3cf8c9e"
+        },
+        {
+          "run_name": "sam3_building_2048",
+          "sha256": "336a9219f5f37652eb1d130ef21113202ccbbf12206d792d88a4d8d5426e9ddf",
+          "status": "complete",
+          "prompt": "building",
+          "inference_confidence": 0.3,
+          "tile_count": 25,
+          "manifest_sha256": "155bf9c0d8772648c210546b16d25c5002149ea1d74a7b2f6500c2a65afa5531",
+          "checkpoint_sha256": "9999e2341ceef5e136daa386eecb55cb414446a00ac2b55eb2dfd2f7c3cf8c9e"
+        },
+        {
+          "run_name": "sam3_house_1024",
+          "sha256": "64bc7b2384f7484bf1877ff7fff2e4177bd23862c79b3742021aa7b498b4b4e9",
+          "status": "complete",
+          "prompt": "house",
+          "inference_confidence": 0.3,
+          "tile_count": 81,
+          "manifest_sha256": "8cd7b93c987aa66b434edf307a9b64cf804c1290379bc3aaadcb00eea218a93a",
+          "checkpoint_sha256": "9999e2341ceef5e136daa386eecb55cb414446a00ac2b55eb2dfd2f7c3cf8c9e"
+        },
+        {
+          "run_name": "sam3_house_1536",
+          "sha256": "c1df6d7aad50a5653e265088b460d03ddfdea26eba10fb224664c73d46c0aaeb",
+          "status": "complete",
+          "prompt": "house",
+          "inference_confidence": 0.3,
+          "tile_count": 36,
+          "manifest_sha256": "1e6f53b53c78737b14b6d5be3223960f24fc3d32cce528f0bfab6bb64795bdcc",
+          "checkpoint_sha256": "9999e2341ceef5e136daa386eecb55cb414446a00ac2b55eb2dfd2f7c3cf8c9e"
+        },
+        {
+          "run_name": "sam3_house_2048",
+          "sha256": "814eb514a2f0bebf11fa31a85bd051b806677124a2bda4c35fadbb6cccfc855e",
+          "status": "complete",
+          "prompt": "house",
+          "inference_confidence": 0.3,
+          "tile_count": 25,
+          "manifest_sha256": "155bf9c0d8772648c210546b16d25c5002149ea1d74a7b2f6500c2a65afa5531",
+          "checkpoint_sha256": "9999e2341ceef5e136daa386eecb55cb414446a00ac2b55eb2dfd2f7c3cf8c9e"
+        },
+        {
+          "run_name": "sam3_roof_1024",
+          "sha256": "39e6ab6fa9226307dee99ab9cfd7c73309f58b959f822c63d5566f808674a103",
+          "status": "complete",
+          "prompt": "roof",
+          "inference_confidence": 0.3,
+          "tile_count": 81,
+          "manifest_sha256": "8cd7b93c987aa66b434edf307a9b64cf804c1290379bc3aaadcb00eea218a93a",
+          "checkpoint_sha256": "9999e2341ceef5e136daa386eecb55cb414446a00ac2b55eb2dfd2f7c3cf8c9e"
+        },
+        {
+          "run_name": "sam3_roof_1536",
+          "sha256": "b4188c547f132b37c3be86bb4d2f426fa35070a4ba6e4e6d81f488a7c2eb49f2",
+          "status": "complete",
+          "prompt": "roof",
+          "inference_confidence": 0.3,
+          "tile_count": 36,
+          "manifest_sha256": "1e6f53b53c78737b14b6d5be3223960f24fc3d32cce528f0bfab6bb64795bdcc",
+          "checkpoint_sha256": "9999e2341ceef5e136daa386eecb55cb414446a00ac2b55eb2dfd2f7c3cf8c9e"
+        },
+        {
+          "run_name": "sam3_roof_2048",
+          "sha256": "52c5015a095b8e82d7903f6ff17e2ae36d9f58224d221d761f0d45d6f65913a3",
+          "status": "complete",
+          "prompt": "roof",
+          "inference_confidence": 0.3,
+          "tile_count": 25,
+          "manifest_sha256": "155bf9c0d8772648c210546b16d25c5002149ea1d74a7b2f6500c2a65afa5531",
+          "checkpoint_sha256": "9999e2341ceef5e136daa386eecb55cb414446a00ac2b55eb2dfd2f7c3cf8c9e"
+        }
+      ]
+    },
+    "confirmed": "All six published city/test >=20 rows are reproduced by global all-size matching, retaining matches only when both prediction and reference areas are >=20, then using that TP for both precision and recall denominators",
+    "limits": "The original real-data scoring script is not retained in the inspected files. Receipts store results, not the matching/filter call sequence. Agreement with this reconstruction does not prove the historical execution path. At baseline commit 09adb7362162888187d7f750412cf057a4cd8512, the synthetic notebook did not implement its prose's >=20 filter; correcting it later does not prove the historical real-data execution path. The 176 tuning variants were not re-executed by this audit."
+  }
+}

@@ -28,7 +28,7 @@ THEMES = {
                  missed="#46463f", on_color="#0b0b0b"),
 }
 
-# Area classes of the 2015 outlines, largest first, as named in citywide_by_size.csv.
+# Area classes of the historical inventory, as named in citywide_by_size.csv.
 SIZES = ["100 m² and up", "50–100 m²", "20–50 m²", "under 20 m²"]
 ESRI = "Esri Mask R-CNN"
 ESRI_NOTE = "Esri Mask R-CNN: the city's run of Esri's Building Footprint Extraction – USA model."
@@ -124,8 +124,8 @@ def found_by_size(t):
                      int(r["found_by_esri_city"]) / n, int(r["found_by_sam3"]) / n))
     return grouped_bars(
         t, "Both models find 9 in 10 large buildings, but few small ones",
-        f"Recall by building area: the share of the {total:,} buildings on Lewisville's 2015 map each model found",
-        data, ["Whole city, May 2026 imagery. The map is older than the imagery, so this is agreement, not accuracy.",
+        f"Recall by area: the share of {total:,} evaluated inventory outlines each model found",
+        data, ["Primarily 2015 or earlier; 33 source features undated. Agreement, not reviewed 2026 accuracy.",
                ESRI_NOTE])
 
 
@@ -136,12 +136,12 @@ def test_area(t):
 
     def precision(r):
         return int(r["tp"]) / (int(r["tp"]) + int(r["fp"]))
-    data = [("Recall", f"buildings found, of {n} on the 2015 map", int(esri["tp"]) / n, int(sam3["tp"]) / n),
-            ("Precision", "outlines that match the 2015 map", precision(esri), precision(sam3))]
+    data = [("Recall", f"buildings found, of {n} inventory outlines", int(esri["tp"]) / n, int(sam3["tp"]) / n),
+            ("Precision", "outlines that match the inventory", precision(esri), precision(sam3))]
     return grouped_bars(
         t, "On the held-out test area, both models find over 9 in 10 buildings",
         "A 700 m square set aside until the settings were frozen, then scored once",
-        data, ["Buildings of 20 m² and up. SAM 3 draws more outlines the 2015 map lacks; some may be new buildings.",
+        data, ["Historical scores for at least 20 m²; see the scoring audit. Unmatched outlines need independent review.",
                ESRI_NOTE])
 
 
@@ -151,7 +151,7 @@ def outcomes(t):
     height = top + step * len(SIZES) + 57
     svg = Svg(840, height, t)
     svg.header("Both models find most large buildings; neither finds most small ones",
-               "What happened to each building on Lewisville's 2015 map, by building area")
+               "What happened to each evaluated inventory outline, by building area")
     keys = [("Found by both", "esri_city_and_sam3", t["both"]), (f"Only {ESRI}", "only_esri_city", t["esri"]),
             ("Only SAM 3", "only_sam3", t["sam3"]), ("Missed by both", "missed_by_esri_city_and_sam3", t["missed"])]
     svg.legend(102, [(name, color) for name, _, color in keys])
@@ -169,7 +169,7 @@ def outcomes(t):
                 ink = t["ink"] if color == t["missed"] else t["on_color"]
                 svg.text(x + 8, y + 20, f"{int(r[key]) / n:.0%}", 13, ink, weight=600)
             x += w
-    svg.text(32, height - 35, "Whole city, May 2026 imagery. Some buildings missed by both were demolished after 2015.",
+    svg.text(32, height - 35, "Whole city, May 2026 imagery. Missed inventory outlines do not establish demolition.",
              12, t["muted"])
     svg.text(32, height - 18, ESRI_NOTE, 12, t["muted"])
     return svg

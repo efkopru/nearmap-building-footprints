@@ -25,7 +25,8 @@ CSV_FIELDS = ("label", "report", "true_positives", "false_positives", "false_neg
               "evaluated_predictions", "evaluated_reference", "excluded_predictions",
               "excluded_reference", "clipped_predictions", "clipped_reference",
               "predictions_fingerprint", "reference_fingerprint", "aoi_fingerprint", "metric_crs",
-              "iou_threshold", "edge_policy", "reference_status")
+              "iou_threshold", "edge_policy", "reference_status", "min_area_m2", "min_area_filter_stage",
+              "area_excluded_predictions", "area_excluded_reference")
 FINGERPRINT_PATTERN = re.compile(r"[0-9a-f]{64}")
 REFERENCE_STATUSES = ("independent_holdout", "agreement_only")
 
@@ -33,6 +34,23 @@ REFERENCE_STATUSES = ("independent_holdout", "agreement_only")
 def _reference_status(report):
     # Reports written before --agreement-only existed could only be independent holdouts.
     return report.get("reference_status", "independent_holdout")
+
+
+def evaluation_filter(report):
+    """Validated cohort key; legacy reports without filtering fields mean no filter."""
+    minimum, stage = report.get("min_area_m2"), report.get("min_area_filter_stage")
+    if minimum is None:
+        if stage is not None:
+            raise ValueError("min_area_filter_stage requires min_area_m2")
+    else:
+        _number(minimum, "min_area_m2")
+        if minimum <= 0:
+            raise ValueError("min_area_m2 must be positive")
+        if stage != "after_aoi_before_matching":
+            raise ValueError("unsupported or missing min_area_filter_stage")
+    return minimum, stage
+
+
 PER_BUILDING_FIELDS = ("eval_id", "found_by", "found_count", "outcome")
 SIZE_CSV_FIELDS = ("label", "kind", "size_class", "min_m2", "max_m2", "reference", "matched_reference",
                    "predictions", "matched_predictions", "precision", "recall", "f1")
@@ -66,6 +84,7 @@ def _validate_report(report, path):
         raise ValueError(f"{path}: invalid predictions_fingerprint")
     if _reference_status(report) not in REFERENCE_STATUSES:
         raise ValueError(f"{path}: reference_status must be one of {REFERENCE_STATUSES}")
+    evaluation_filter(report)
     if not isinstance(report["metric_crs"], str) or not report["metric_crs"]:
         raise ValueError(f"{path}: missing metric CRS")
     _number(report["iou_threshold"], "iou_threshold", ratio=True)
@@ -94,6 +113,8 @@ def _load_reports(paths):
         # Reports written before size classes existed have none, like a report made without them.
         if report.get("size_bins_m2") != reports[0].get("size_bins_m2"):
             mismatches.append("size_bins_m2")
+        if evaluation_filter(report) != evaluation_filter(reports[0]):
+            mismatches.append("min_area_m2/min_area_filter_stage")
         if mismatches:
             raise ValueError(f"{path}: incompatible evaluation report ({', '.join(mismatches)}); reports must use the same holdout and settings")
     return reports
@@ -142,11 +163,15 @@ def compare_reports(paths, labels=None, reports=None):
                    "clipped_reference": report["clipped_counts"]["reference"],
                    "predictions_fingerprint": report.get("predictions_fingerprint"),
                    **{field: report[field] for field in ("reference_fingerprint", "aoi_fingerprint", "metric_crs", "iou_threshold", "edge_policy")},
-                   "reference_status": _reference_status(report)}
+                   "reference_status": _reference_status(report),
+                   "min_area_m2": evaluation_filter(report)[0],
+                   "min_area_filter_stage": evaluation_filter(report)[1],
+                   **{f"area_excluded_{key}": report.get("area_excluded_counts", {}).get(key, 0)
+                      for key in ("predictions", "reference")}}
             for field, value in row.items():
                 if field.startswith("matched_"):
                     _number(value, field, nullable=True)
-                elif field.startswith(("evaluated_", "excluded_", "clipped_")):
+                elif field.startswith(("evaluated_", "excluded_", "clipped_", "area_excluded_")):
                     _number(value, field, count=True)
         except KeyError as error:
             raise ValueError(f"{path}: incomplete evaluation report, missing {error.args[0]}") from error

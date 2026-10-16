@@ -107,6 +107,18 @@ def test_reports_against_different_references_or_settings_are_refused():
     first = evaluate(sam, reference, aoi(), crs=CRS).report
     for second in (evaluate(esri, frame([box(0, 0, 10, 10)]), aoi(), crs=CRS).report,
                    evaluate(esri, reference, aoi(), crs=CRS, iou_threshold=0.7).report,
+                   evaluate(esri, reference, aoi(), crs=CRS, min_area_m2=20).report,
                    evaluate(esri, reference, aoi(), crs=CRS, reference_status="agreement_only").report):
         with pytest.raises(ValueError, match="same reference"):
             agree(sam, esri, aoi(), crs=CRS, reports=[first, second])
+
+
+def test_area_excluded_outlines_cannot_become_change_candidates():
+    small = frame([box(0, 0, 4, 4)])
+    reference = frame([])
+    reports = [evaluate(small, reference, aoi(), crs=CRS, min_area_m2=20,
+                        reference_status="agreement_only").report for _ in range(2)]
+    summary, layers = agree(small, small, aoi(), crs=CRS, reports=reports)
+    assert summary["pairs"] == 1
+    assert summary["candidate_new"] == 0
+    assert layers["candidate_new"].empty

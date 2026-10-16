@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="840" height="496" viewBox="0 0 840 496" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
 <rect x="0.5" y="0.5" width="839" height="495" rx="12" fill="#fcfcfb" stroke="#e1e0d9"/>
 <text x="32" y="44" font-size="21" font-weight="700" text-anchor="start" fill="#0b0b0b">Both models find 9 in 10 large buildings, but few small ones</text>
-<text x="32" y="70" font-size="14" font-weight="400" text-anchor="start" fill="#52514e">Recall by building area: the share of the 38,882 buildings on Lewisville's 2015 map each model found</text>
+<text x="32" y="70" font-size="14" font-weight="400" text-anchor="start" fill="#52514e">Recall by area: the share of 38,882 evaluated inventory outlines each model found</text>
 <rect x="32" y="91" width="14" height="14" rx="3" fill="#e34948"/>
 <text x="54" y="103" font-size="14" font-weight="400" text-anchor="start" fill="#52514e">Esri Mask R-CNN</text>
 <rect x="205" y="91" width="14" height="14" rx="3" fill="#2a78d6"/>
@@ -36,6 +36,6 @@
 <text x="308.112" y="370" font-size="13" font-weight="600" text-anchor="start" fill="#0b0b0b">0%</text>
 <path d="M300 378h10.9333a4 4 0 0 1 4 4v10a4 4 0 0 1 -4 4h-10.9333z" fill="#2a78d6"/>
 <text x="322.933" y="392" font-size="13" font-weight="600" text-anchor="start" fill="#0b0b0b">3%</text>
-<text x="32" y="468" font-size="12" font-weight="400" text-anchor="start" fill="#898781">Whole city, May 2026 imagery. The map is older than the imagery, so this is agreement, not accuracy.</text>
+<text x="32" y="468" font-size="12" font-weight="400" text-anchor="start" fill="#898781">Primarily 2015 or earlier; 33 source features undated. Agreement, not reviewed 2026 accuracy.</text>
 <text x="32" y="485" font-size="12" font-weight="400" text-anchor="start" fill="#898781">Esri Mask R-CNN: the city's run of Esri's Building Footprint Extraction – USA model.</text>
 </svg>

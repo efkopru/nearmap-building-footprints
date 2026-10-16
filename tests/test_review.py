@@ -33,6 +33,8 @@ def test_counts_what_the_review_changed():
         "crossing_aoi_edge": {"original": 1, "reviewed": 1}, "reviewed_problems": 0, "original_problems": 0,
         "reviewed_overlaps": 0}
     assert summary["ready_for_evaluation"] and summary["provenance"]["reviewer"] == "EK"
+    assert summary["edge_policy"] == "exclude"
+    assert "not verified construction" in summary["change_interpretation"]
     assert result["modified"].review_iou.iloc[0] == pytest.approx(100 / 140)
     assert list(result["removed"].geometry) == [box(40, 0, 50, 10)]
 
@@ -67,7 +69,25 @@ def test_command_writes_summary_and_layers(tmp_path):
           "--output-json", str(output_json), "--output-gpkg", str(output_gpkg)])
     summary = json.loads(output_json.read_text(encoding="utf-8"))
     assert summary["counts"]["added"] == 1 and summary["provenance"]["imagery_date"] == "2026-05"
+    assert summary["provenance"]["coverage_complete"] is False
+    assert summary["provenance"]["independent_review"] is False
     assert set(gpd.list_layers(output_gpkg).name) == {"added", "removed", "modified", "unchanged", "problems", "overlaps"}
     with pytest.raises(SystemExit):
         main(["--original", str(paths["original"]), "--reviewed", str(paths["reviewed"]), "--aoi", str(paths["aoi"]),
               "--metric-crs", CRS, "--output-json", str(output_json)])
+
+
+def test_command_records_explicit_human_review_attestations(tmp_path):
+    original, reviewed = layers()
+    for name, value in (("original", original), ("reviewed", reviewed), ("aoi", aoi())):
+        value.to_file(tmp_path / f"{name}.gpkg")
+    output = tmp_path / "attested.json"
+    main(["--original", str(tmp_path / "original.gpkg"), "--reviewed", str(tmp_path / "reviewed.gpkg"),
+          "--aoi", str(tmp_path / "aoi.gpkg"), "--metric-crs", CRS,
+          "--reviewer", "Test reviewer", "--review-date", "2026-10-15", "--imagery-date", "2026-05",
+          "--label-convention", "visible roof outlines from 4 m2",
+          "--coverage-complete", "--independent-review", "--output-json", str(output)])
+    summary = json.loads(output.read_text(encoding="utf-8"))
+    assert summary["provenance"]["review_date"] == "2026-10-15"
+    assert summary["provenance"]["coverage_complete"] is True
+    assert summary["provenance"]["independent_review"] is True

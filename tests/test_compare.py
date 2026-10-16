@@ -6,7 +6,7 @@ import geopandas as gpd
 import pytest
 from shapely.geometry import MultiPolygon, Polygon, box
 
-from nearmap_buildings.compare import _outcome, compare_reports, main, per_building
+from nearmap_buildings.compare import _outcome, compare_reports, evaluation_filter, main, per_building
 from nearmap_buildings.evaluation import evaluate, geometry_fingerprint
 
 
@@ -89,6 +89,45 @@ def test_older_reports_count_as_holdouts_and_the_status_is_in_the_csv(tmp_path):
     del older["reference_status"]
     rows = compare_reports([save(tmp_path, "old", older), save(tmp_path, "new", report())])
     assert [row["reference_status"] for row in rows] == ["independent_holdout", "independent_holdout"]
+
+
+def test_legacy_no_filter_reports_remain_comparable(tmp_path):
+    older, current = report(), report()
+    for key in ("min_area_m2", "min_area_filter_stage", "min_area_filter_definition", "area_excluded_counts"):
+        older.pop(key)
+    rows = compare_reports([save(tmp_path, "old", older), save(tmp_path, "new", current)])
+    assert [row["min_area_m2"] for row in rows] == [None, None]
+    assert [row["area_excluded_reference"] for row in rows] == [0, 0]
+
+
+@pytest.mark.parametrize("first_cutoff,second_cutoff", [(None, 20), (20, 50)])
+def test_reports_with_different_minimum_area_cohorts_are_refused(tmp_path, first_cutoff, second_cutoff):
+    source, area = frame([box(0, 0, 10, 10)]), frame([box(-10, -10, 100, 100)])
+    reports = [evaluate(source, source, area, crs=CRS, min_area_m2=cutoff).report for cutoff in (first_cutoff, second_cutoff)]
+    with pytest.raises(ValueError, match="min_area_m2"):
+        compare_reports([save(tmp_path, "first", reports[0]), save(tmp_path, "second", reports[1])])
+
+
+@pytest.mark.parametrize("minimum,stage", [(20, None), (20, "before_aoi"), (None, "after_aoi_before_matching"),
+                                           (0, "after_aoi_before_matching"), (True, "after_aoi_before_matching")])
+def test_cohort_metadata_must_identify_a_supported_filter(minimum, stage):
+    with pytest.raises(ValueError, match="min_area"):
+        evaluation_filter({"min_area_m2": minimum, "min_area_filter_stage": stage})
+
+
+def test_filtered_comparison_records_cohort_and_preserves_reference_row_mapping(tmp_path):
+    source, area = frame([box(0, 0, 3, 3), box(10, 0, 14, 5)]), frame([box(-10, -10, 100, 100)])
+    value = evaluate(source, source, area, crs=CRS, min_area_m2=20).report
+    paths = [save(tmp_path, "one", value), save(tmp_path, "two", deepcopy(value))]
+    rows = compare_reports(paths)
+    assert [row["min_area_m2"] for row in rows] == [20.0, 20.0]
+    assert [row["area_excluded_reference"] for row in rows] == [1, 1]
+    reference = tmp_path / "reference.gpkg"
+    source.to_file(reference)
+    buildings = per_building(paths, ["one", "two"], reference=reference)
+    assert buildings.eval_id.tolist() == [1]
+    assert buildings.one_match_id.tolist() == buildings.two_match_id.tolist() == [1]
+    assert buildings.area.tolist() == [20.0]
 
 
 def test_rejects_malformed_predictions_fingerprint(tmp_path):
