@@ -139,8 +139,8 @@ def test_area(t):
     data = [("Recall", f"buildings found, of {n} inventory outlines", int(esri["tp"]) / n, int(sam3["tp"]) / n),
             ("Precision", "outlines that match the inventory", precision(esri), precision(sam3))]
     return grouped_bars(
-        t, "On the held-out test area, both models find over 9 in 10 buildings",
-        "A 700 m square set aside until the settings were frozen, then scored once",
+        t, "Historical test-area inventory agreement",
+        "Frozen settings against inventory outlines in the 700 m test square",
         data, ["Historical scores for at least 20 m²; see the scoring audit. Unmatched outlines need independent review.",
                ESRI_NOTE])
 
@@ -172,6 +172,40 @@ def outcomes(t):
     svg.text(32, height - 35, "Whole city, May 2026 imagery. Missed inventory outlines do not establish demolition.",
              12, t["muted"])
     svg.text(32, height - 18, ESRI_NOTE, 12, t["muted"])
+    return svg
+
+
+def reviewed_test_accuracy(t):
+    # Keep the cohorts separate: the 20 m² filter applies to both sets before matching.
+    with (RESULTS / "reviewed_2026/test_area_scores.csv").open(encoding="utf-8", newline="") as stream:
+        scores = {(r["cohort"], r["method_key"]): r for r in csv.DictReader(stream)}
+    methods = [("esri_city", "Esri, city run", t["esri"]),
+               ("esri_local", "Esri, local run", t["both"]), ("sam3", "SAM 3", t["sam3"])]
+    svg = Svg(840, 442, t)
+    svg.header("Accuracy against independently reviewed 2026 labels",
+               "Frozen settings in the held-out 700 m test square; IoU ≥0.5; review 15 October 2026")
+    svg.legend(102, [(label, color) for _, label, color in methods])
+    bottom, full = 350, 185
+    for panel, (cohort, label) in enumerate([("all_sizes", "All sizes"), ("at_least_20m2", "At least 20 m²")]):
+        x0 = 58 + 398 * panel
+        n = int(scores[cohort, "sam3"]["reference"])
+        svg.text(x0, 141, f"{label}: {n:,} reviewed outlines", 15, weight=600)
+        for value in (0, 0.5, 1):
+            y = bottom - value * full
+            svg.line(x0, y, x0 + 320, y, t["grid"] if value else t["muted"])
+            svg.text(x0 - 8, y + 4, f"{value:.1f}", 11, t["muted"], anchor="end")
+        for group, metric in enumerate(["precision", "recall", "f1"]):
+            center = x0 + 49 + group * 111
+            for index, (key, _, color) in enumerate(methods):
+                value = float(scores[cohort, key][metric])
+                x = center - 35 + index * 25
+                y = bottom - value * full
+                svg.rect(x, y, 20, value * full, color, rx=2)
+                svg.text(x + 10, y - 7, f"{value:.2f}", 10, weight=600, anchor="middle")
+            svg.text(center, bottom + 23, "F1" if metric == "f1" else metric.capitalize(), 13, anchor="middle")
+    svg.text(32, 405, "Esad attested complete test-AOI review with no prior or current prediction exposure.", 12, t["muted"])
+    svg.text(32, 423, "Area filter: both sets before matching. This test-area result is not a city-wide accuracy estimate.",
+             12, t["muted"])
     return svg
 
 
@@ -223,7 +257,7 @@ def how_it_works(t):
 
 
 FIGURES = {"how-it-works": how_it_works, "found-by-size": found_by_size, "test-area": test_area,
-           "outcomes-by-size": outcomes}
+           "outcomes-by-size": outcomes, "reviewed-test-accuracy": reviewed_test_accuracy}
 
 
 def main(argv=None):
