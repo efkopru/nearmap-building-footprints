@@ -1,8 +1,8 @@
 """Match two methods' outlines to each other, without reference labels.
 
-Uses the same one-to-one matching as nbf evaluate. Where the reference is outdated,
-an outline two independent methods agree on but the reference lacks is a likely new
-or changed building: pass each method's evaluation report to list those candidates.
+Uses the same one-to-one matching as nbf evaluate. Pass each method's evaluation
+report to list agreed outlines that did not match the reference. These candidates
+can reflect inventory omissions, geometry differences, changes or shared errors.
 Agreement between two models is not accuracy; both can be wrong in the same way.
 """
 from __future__ import annotations
@@ -17,7 +17,7 @@ import pandas as pd
 import shapely
 
 from .common import FINGERPRINT_METHOD, read_json, write_json
-from .compare import FINGERPRINT_PATTERN, _field_prefix
+from .compare import FINGERPRINT_PATTERN, _field_prefix, evaluation_filter
 from .evaluation import (_summary, _validate, _within_aoi, geometry_fingerprint, maximum_cardinality_matches,
                          row_order_fingerprint)
 from .postprocess import metric_crs, write_layers
@@ -33,6 +33,8 @@ def _check_reports_agree(reports, labels):
     # Reports written before --agreement-only existed could only be independent holdouts.
     if first.get("reference_status", "independent_holdout") != second.get("reference_status", "independent_holdout"):
         mismatches.append("reference_status")
+    if evaluation_filter(first) != evaluation_filter(second):
+        mismatches.append("min_area_m2/min_area_filter_stage")
     if mismatches:
         raise ValueError(f"The {labels[0]} and {labels[1]} reports were not scored against the same reference "
                          f"and settings ({', '.join(mismatches)}); re-run nbf evaluate for both with one reference and AOI")
@@ -137,7 +139,10 @@ def agree(first: gpd.GeoDataFrame, second: gpd.GeoDataFrame, aoi: gpd.GeoDataFra
         summary["candidate_new_definition"] = (
             "Pairs both methods drew where no supplied evaluation report matched the outline to its reference "
             f"(reports supplied for: {', '.join(labels[index] for index in supplied)}). "
-            "Likely new or changed since the reference was made; review them before using them as labels.")
+            "Candidates for review, not verified new buildings. Possible causes include inventory omissions, "
+            "geometry or roof/ground convention differences, one-to-one matching constraints, actual changes "
+            "and shared model errors. Dated evidence is required to establish when a building changed. "
+            "Keep these candidates separate from blind held-out reference review.")
         for index in supplied:
             frame, (_, matched) = selected[index], reference[index]
             no_reference = frame.loc[frame.reference_match.eq(False).fillna(False).to_numpy(dtype=bool)]

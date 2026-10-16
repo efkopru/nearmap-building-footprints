@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 from bisect import bisect_right
 from dataclasses import dataclass
+from datetime import date
 import hashlib
 import math
 import json
@@ -29,6 +30,7 @@ from .postprocess import metric_crs, polygon_parts, write_layers
 
 
 ROW_ORDER_FINGERPRINT_METHOD = "sha256-normalized-wkb-source-crs-row-order-v1"
+MIN_AREA_FILTER_STAGE = "after_aoi_before_matching"
 # What the reference is. Only an independent, completely labeled holdout measures accuracy.
 REFERENCE_REQUIREMENTS = {
     "independent_holdout": "Independent annotated holdout; AOI completely labeled. Independence is asserted by the operator, not inferred by this program. No pseudo-label validation.",
@@ -194,6 +196,50 @@ def _within_aoi(frame, aoi, policy):
     return data.loc[selected].copy().reset_index(drop=True), data.loc[excluded].copy()
 
 
+def _area_cohort(frame, minimum):
+    """Filter post-AOI metric geometries while retaining original eval_id values."""
+    keep = np.ones(len(frame), dtype=bool) if minimum is None else frame.geometry.area.to_numpy() >= minimum
+    return frame.loc[keep].copy().reset_index(drop=True), frame.loc[~keep].copy()
+
+
+def _validated_review_receipt(receipt, reference, aoi, reference_status, edge_policy):
+    """Validate the receipt's bindings and explicit human attestations, not their truth."""
+    if reference_status != "independent_holdout":
+        raise ValueError("a review receipt is only used with an independent holdout")
+    if not isinstance(receipt, dict) or type(receipt.get("schema_version")) is not int or receipt["schema_version"] != 1:
+        raise ValueError("review receipt must use schema_version 1")
+    if receipt.get("ready_for_evaluation") is not True:
+        raise ValueError("review receipt is not ready for evaluation")
+    if edge_policy != "exclude" or receipt.get("edge_policy") != "exclude":
+        raise ValueError("review receipt requires the checked exclude edge policy")
+    for key, frame in (("reviewed_fingerprint", reference), ("aoi_fingerprint", aoi)):
+        if receipt.get(key) != geometry_fingerprint(frame):
+            raise ValueError(f"review receipt {key} does not match the evaluation input")
+    provenance = receipt.get("provenance")
+    if not isinstance(provenance, dict):
+        raise ValueError("review receipt requires human review provenance")
+    text_fields = ("reviewer", "review_date", "imagery_date", "label_convention")
+    if any(not isinstance(provenance.get(key), str) or not provenance[key].strip() for key in text_fields):
+        raise ValueError("review receipt requires reviewer, review_date, imagery_date and label_convention")
+    if provenance["reviewer"].strip().casefold() in {"reviewer", "actual_reviewer", "replace_with_reviewer",
+                                                  "your name", "your_name", "name", "todo", "tbd", "unknown", "<reviewer>"}:
+        raise ValueError("review receipt reviewer must identify the reviewer, not a placeholder")
+    for key in ("review_date", "imagery_date"):
+        value = provenance[key]
+        candidate = value + "-01" if key == "imagery_date" and len(value) == 7 else value
+        try:
+            valid = date.fromisoformat(candidate).isoformat() == candidate
+        except ValueError:
+            valid = False
+        if not valid:
+            raise ValueError(f"review receipt {key} must be a valid ISO date" + (" or YYYY-MM" if key == "imagery_date" else ""))
+    for key in ("coverage_complete", "independent_review"):
+        if provenance.get(key) is not True:
+            raise ValueError(f"review receipt requires the human attestation {key}=true")
+    return {key: receipt[key] for key in ("schema_version", "ready_for_evaluation", "edge_policy",
+                                        "reviewed_fingerprint", "aoi_fingerprint", "provenance")}
+
+
 def maximum_cardinality_matches(predictions, references, threshold: float = 0.5):
     """Maximum number of one-to-one IoU-qualified matches; then maximize total IoU.
 
@@ -256,7 +302,7 @@ def _summary(values):
 def evaluate(predictions: gpd.GeoDataFrame, reference: gpd.GeoDataFrame,
              aoi: gpd.GeoDataFrame, *, crs: str, iou_threshold: float = 0.5,
              edge_policy: str = "exclude", reference_status: str = "independent_holdout",
-             size_bins=None) -> EvaluationResult:
+             size_bins=None, min_area_m2: float | None = None, review_receipt: dict | None = None) -> EvaluationResult:
     """Evaluate independently labeled objects, never model-generated pseudo-labels.
 
     This API cannot prove label independence; the caller must establish provenance.
@@ -264,12 +310,20 @@ def evaluate(predictions: gpd.GeoDataFrame, reference: gpd.GeoDataFrame,
     declare the reference an existing inventory so the report records agreement only.
     Empty dataframes are valid; malformed rows are errors. Undefined ratios are null.
     size_bins, edges in square metres such as [20, 50, 100], adds per-size-class metrics.
+    min_area_m2 filters both metric datasets after the AOI policy and before matching;
+    the cutoff is inclusive and clip therefore uses the clipped area. Size bins remain
+    diagnostics of this cohort's global matching. A supplied review receipt binds the
+    reference and AOI to recorded human review attestations; it does not prove them.
     """
     edges = size_bin_edges(size_bins) if size_bins is not None else None
     if not 0 < iou_threshold <= 1 or edge_policy not in {"exclude", "clip"}:
         raise ValueError("IoU must be in (0, 1] and edge policy must be exclude or clip")
     if reference_status not in REFERENCE_REQUIREMENTS:
         raise ValueError(f"reference_status must be one of {sorted(REFERENCE_REQUIREMENTS)}")
+    if min_area_m2 is not None:
+        if isinstance(min_area_m2, bool) or not isinstance(min_area_m2, (int, float)) or not math.isfinite(min_area_m2) or min_area_m2 <= 0:
+            raise ValueError("min_area_m2 must be positive and finite, or None")
+        min_area_m2 = float(min_area_m2)
     target = metric_crs(crs)
     # size_class is only written, and so only reserved, when size bins are requested.
     extra = ("size_class",) if edges is not None else ()
@@ -281,6 +335,9 @@ def evaluate(predictions: gpd.GeoDataFrame, reference: gpd.GeoDataFrame,
     region = shapely.union_all(area.geometry.to_numpy())
     pred, excluded_pred = _within_aoi(pred, region, edge_policy)
     ref, excluded_ref = _within_aoi(ref, region, edge_policy)
+    pred, area_excluded_pred = _area_cohort(pred, min_area_m2)
+    ref, area_excluded_ref = _area_cohort(ref, min_area_m2)
+    receipt = _validated_review_receipt(review_receipt, reference, aoi, reference_status, edge_policy) if review_receipt is not None else None
     matches = maximum_cardinality_matches(list(pred.geometry), list(ref.geometry), iou_threshold)
     for frame in (pred, ref):
         frame["match_id"] = -1
@@ -321,11 +378,15 @@ def evaluate(predictions: gpd.GeoDataFrame, reference: gpd.GeoDataFrame,
         "metric_crs": target.to_string(), "iou_threshold": iou_threshold,
         "edge_policy": edge_policy,
         "edge_policy_definition": "exclude: retain whole objects covered by AOI, including boundary-touching objects; exclude crossings. clip: intersect both datasets with AOI and retain one identity per original object. Zero-area intersections are outside.",
+        "min_area_m2": min_area_m2,
+        "min_area_filter_stage": MIN_AREA_FILTER_STAGE if min_area_m2 is not None else None,
+        "min_area_filter_definition": "When set, retain reference and prediction geometries with area >= min_area_m2 in the metric CRS after applying the AOI policy, then compute matching anew. Under clip, use clipped area. AOI and area exclusions are disjoint; source row IDs and fingerprints are unchanged.",
         "matching": "One-to-one maximum-cardinality assignment among IoU-qualified pairs, then maximum total IoU; no score threshold is applied by evaluation.",
         "input_counts": {"predictions": len(predictions), "reference": len(reference)},
         "evaluated_counts": {"predictions": len(pred), "reference": len(ref)},
         "excluded_counts": {"predictions": {str(k): int(v) for k, v in excluded_pred.aoi_action.value_counts().items()},
                             "reference": {str(k): int(v) for k, v in excluded_ref.aoi_action.value_counts().items()}},
+        "area_excluded_counts": {"predictions": len(area_excluded_pred), "reference": len(area_excluded_ref)},
         "clipped_counts": {"predictions": int((pred.aoi_action == "clipped").sum()),
                            "reference": int((ref.aoi_action == "clipped").sum())},
         "true_positives": tp, "false_positives": fp, "false_negatives": fn,
@@ -353,6 +414,8 @@ def evaluate(predictions: gpd.GeoDataFrame, reference: gpd.GeoDataFrame,
         "size_bins_m2": edges,
         "matches": match_rows,
     }
+    if receipt is not None:
+        report["review_receipt"] = receipt
     if edges is not None:
         classes, thresholds = size_metrics([g.area for g in ref.geometry], ref.match_id >= 0,
                                            [g.area for g in pred.geometry], pred.match_id >= 0, edges)
@@ -363,13 +426,16 @@ def evaluate(predictions: gpd.GeoDataFrame, reference: gpd.GeoDataFrame,
             # Aligned with evaluated_reference_ids.
             "evaluated_reference_size_classes": list(ref.size_class),
         })
-    return EvaluationResult(report, {
+    layers = {
         "matched_predictions": pred.loc[pred.match_id >= 0].copy(),
         "matched_reference": ref.loc[ref.match_id >= 0].copy(),
         "unmatched_predictions": pred.loc[pred.match_id < 0].copy(),
         "unmatched_reference": ref.loc[ref.match_id < 0].copy(),
         "excluded_predictions": excluded_pred, "excluded_reference": excluded_ref,
-    })
+    }
+    if min_area_m2 is not None:
+        layers.update({"area_excluded_predictions": area_excluded_pred, "area_excluded_reference": area_excluded_ref})
+    return EvaluationResult(report, layers)
 
 
 def main(argv=None):
@@ -387,6 +453,10 @@ def main(argv=None):
     parser.add_argument("--edge-policy", choices=["exclude", "clip"], default="exclude")
     parser.add_argument("--size-bins-m2", type=float, nargs="+", metavar="AREA",
                         help="also report metrics by building size, e.g. 20 50 100 for <20, 20-50, 50-100 and >=100 m2")
+    parser.add_argument("--min-area-m2", type=float,
+                        help="retain both inputs at or above this area after the AOI policy, before matching; clip uses clipped area")
+    parser.add_argument("--review-receipt", type=Path,
+                        help="bind an independent-holdout run to a ready review-check JSON with human attestations")
     status = parser.add_mutually_exclusive_group(required=True)
     status.add_argument("--independent-holdout", action="store_true",
                         help="acknowledge independent annotations and complete labels within AOI, not pseudo-labels")
@@ -394,21 +464,31 @@ def main(argv=None):
                         help="the reference is an existing inventory that may be outdated or incomplete; report agreement, not accuracy")
     parser.add_argument("--overwrite", action="store_true")
     args = parser.parse_args(argv)
+    if args.review_receipt is not None and not args.independent_holdout:
+        parser.error("--review-receipt requires --independent-holdout")
     sources = [Path(value).resolve() for value in (args.predictions, args.reference, args.aoi)]
+    protected = sources + ([args.review_receipt.resolve()] if args.review_receipt is not None else [])
     destinations = [Path(value).resolve() for value in (args.output_json, args.output_gpkg) if value]
     if len(set(destinations)) != len(destinations):
         parser.error("JSON and GPKG outputs must be different files")
     for output in destinations:
-        if any(output == source or (output.exists() and output.samefile(source)) for source in sources):
+        if any(output == source or (output.exists() and output.samefile(source)) for source in protected):
             parser.error("output must not overwrite an input file")
         if output.exists() and not args.overwrite:
             parser.error(f"output already exists: {output}")
     frames = []
     for filename, layer in ((args.predictions, args.predictions_layer), (args.reference, args.reference_layer), (args.aoi, args.aoi_layer)):
         frames.append(gpd.read_file(filename, layer=layer) if layer else gpd.read_file(filename))
+    receipt_bytes = args.review_receipt.read_bytes() if args.review_receipt is not None else None
+    receipt = json.loads(receipt_bytes) if receipt_bytes is not None else None
+    if receipt_bytes is not None and not isinstance(receipt, dict):
+        raise ValueError("review receipt must be a JSON object")
     result = evaluate(*frames, crs=args.metric_crs, iou_threshold=args.iou_threshold, edge_policy=args.edge_policy,
                       reference_status="agreement_only" if args.agreement_only else "independent_holdout",
-                      size_bins=args.size_bins_m2)
+                      size_bins=args.size_bins_m2, min_area_m2=args.min_area_m2, review_receipt=receipt)
+    if receipt_bytes is not None:
+        result.report["review_receipt"].update({"path": str(args.review_receipt.resolve()),
+                                               "sha256": hashlib.sha256(receipt_bytes).hexdigest()})
     result.report["sources"] = {role: {"path": str(path), "layer": layer} for role, path, layer in
                                 zip(("predictions", "reference", "aoi"), sources,
                                     (args.predictions_layer, args.reference_layer, args.aoi_layer))}

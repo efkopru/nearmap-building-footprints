@@ -197,9 +197,11 @@ nbf evaluate --predictions outputs/text_pilot01/cleaned.gpkg --predictions-layer
 
 Each predicted outline matches at most one reference building, choosing the most matches above the IoU threshold and then the best overlap. The report gives precision, recall, F1, overlap, area error and boundary distance, and the GeoPackage has matched, unmatched and excluded layers. Buildings crossing the AOI's edge are left out (`--edge-policy clip` clips them instead). A metric with nothing to count is `null`, not 0.
 
-**By size.** `--size-bins-m2 20 50 100` adds size classes (under 20, 20–50, 50–100 and 100 m² and up) plus the same metrics for everything above each edge, such as F1 for buildings of 20 m² and up.
+**Area summaries.** `--size-bins-m2 20 50 100` summarizes one global matching by area class (under 20, 20-50, 50-100 and 100 m² and up) and at each minimum-area threshold. Each object uses its own area, so matched predictions and references can fall in different classes. These summaries do not re-run matching on filtered inputs.
 
-**Outdated reference.** If the only reference is an older map, use `--agreement-only` instead of `--independent-holdout`. The scores then measure agreement with that map, not accuracy, since an unmatched outline may be a real new building.
+**Filter before matching.** For a protocol that scores only buildings of 20 m² and up, add `--min-area-m2 20` to `evaluate`. This removes predictions and reference polygons below that area after AOI handling and before one-to-one matching. The report records the filter and separate area-exclusion counts. Run a second evaluation without this flag for all-size and small-structure results; `--size-bins-m2` alone does not reproduce the filtered protocol. `nbf compare` refuses reports with different area filters.
+
+**Outdated reference.** If the only reference is an older map, use `--agreement-only` instead of `--independent-holdout`. The scores measure agreement with that map, not current accuracy. Unmatched outlines may reflect inventory omissions, changed structures, different geometry conventions or model errors. The Lewisville [reference provenance](../results/lewisville/reference_provenance.json) records 38,924 source features, primarily dated 2015 or earlier with 33 undated, and 38,882 evaluated city-wide outlines.
 
 **Compare methods.** Once every method is scored on the same reference and AOI:
 
@@ -209,21 +211,29 @@ nbf compare --reports outputs/text_pilot01/evaluation.json outputs/esri_run01/ev
 
 `nbf compare` refuses reports made with different references, AOIs or settings, and never mixes agreement-only reports with independent ones. If every report was made with the same `--size-bins-m2`, `--by-size FILE` adds a table by size class. `--per-building` writes one row per reference building with an `outcome` such as `found by both`, `only esri` or `missed by both`; style it in GIS to see where the methods disagree. It first checks that the reference file still has the same rows in the same order (pass `--reference` if it has moved). The demo's `esri_format_predictions.gdb` lets you try this whole sequence without ArcGIS.
 
-**Compare two methods without a reference.** When the reference is old, two models agreeing is the most useful signal:
+**Compare two methods without a reference.** Model agreement can identify candidates for a separate review:
 
 ```bash
 nbf agree --predictions outputs/text_pilot01/cleaned.gpkg outputs/esri_run01/cleaned.gpkg --layers cleaned cleaned --labels sam3_text esri --reports outputs/text_pilot01/evaluation.json outputs/esri_run01/evaluation.json --aoi data/reference/test_aoi.gpkg --metric-crs EPSG:32614 --output-json outputs/agreement.json --output-gpkg outputs/agreement.gpkg
 ```
 
-It matches the two methods' outlines one to one and writes `both` and `only_<label>` layers. With evaluation reports (`--reports`, or `-` for a method without one) it also lists `candidate_new`: outlines both methods drew that the reference lacks, most likely new buildings. Review them before using any as labels; two methods can make the same mistake.
+It matches the two methods' outlines one to one and writes `both` and `only_<label>` layers. With evaluation reports (`--reports`, or `-` for a method without one) it also lists `candidate_new`: model-agreement candidates unmatched to the reference. The layer name is retained for compatibility. It does not establish construction dates or prove change: inventory omissions, geometry conventions and shared model errors can produce the same pattern. Keep these candidates out of blind held-out annotation and inspect them separately after the independent review is frozen.
 
-**Turn an old map into a real reference.** An outdated map becomes an independent reference only after a person checks every outline in the AOI against the imagery, adding, removing and correcting buildings. Do that in GIS on a copy, never by copying model output, then check what changed:
+**Turn an old map into a reviewed reference.** A person must check the entire AOI against the imagery, including missing structures and uncertain areas, while keeping predictions and agreement candidates hidden. Work in GIS on a copy, freeze the reviewed labels and record the coverage and outline convention. Running a command or supplying an attestation does not perform this review. Only after completing it, record the actual reviewer and review date:
 
 ```bash
-nbf review-check --original data/reference/lewisville_2015.gpkg --reviewed data/reference/test_area_reviewed.gpkg --aoi data/reference/test_area_aoi.gpkg --metric-crs EPSG:26914 --reviewer "Your Name" --imagery-date 2026-05 --label-convention "roof outline; every structure of 4 m2 and up" --output-json outputs/accuracy/review_check.json --output-gpkg outputs/accuracy/review_check.gpkg
+nbf review-check --original data/reference/lewisville_2015.gpkg --reviewed data/reference/test_area_reviewed.gpkg --aoi data/reference/test_area_aoi.gpkg --metric-crs EPSG:26914 --reviewer "ACTUAL_REVIEWER" --review-date YYYY-MM-DD --imagery-date 2026-05 --label-convention "roof outline; every structure of 4 m2 and up" --coverage-complete --independent-review --output-json outputs/accuracy/review_check.json --output-gpkg outputs/accuracy/review_check.gpkg
 ```
 
-It counts outlines as `unchanged`, `modified`, `added` or `removed`, flags outlines evaluation would refuse and ones that overlap, and records the reviewer and imagery date. `ready_for_evaluation` is true once there are no problems. [`configs/accuracy.example.json`](../configs/accuracy.example.json) runs the whole accuracy check for the Lewisville test area in one go (see section 10).
+Replace the placeholders with the completed review's facts. Use `--coverage-complete` and `--independent-review` only when those statements are true. The check counts `unchanged`, `modified`, `added` and `removed` geometries, flags geometry problems and overlaps, and records provenance. These change categories describe edits to the inventory, not construction or demolition dates.
+
+For the accuracy workflow, pass the resulting receipt explicitly:
+
+```bash
+nbf evaluate --predictions outputs/lewisville/city/sam3_building_1536/cleaned.gpkg --predictions-layer cleaned --reference data/reference/test_area_reviewed.gpkg --aoi data/reference/test_area_aoi.gpkg --metric-crs EPSG:26914 --independent-holdout --review-receipt outputs/accuracy/review_check.json --min-area-m2 20 --output-json outputs/accuracy/sam3/evaluation.json
+```
+
+`--review-receipt` is optional for general evaluation but required by the [accuracy config](../configs/accuracy.example.json). It requires a ready receipt, complete provenance and affirmative coverage/independence attestations, matching reference and AOI fingerprints, `--independent-holdout`, and the default `exclude` edge policy. A stale or unrelated receipt is refused. The config is a template that must be filled from an actual human review; it does not certify one automatically. No Lewisville accuracy result exists until that review and the frozen evaluation are complete.
 
 ## 9. Fine-tune SAM 3
 

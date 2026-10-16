@@ -31,6 +31,8 @@ Outline **every** building inside an evaluation AOI; scattered examples are not 
 
 Split the AOIs by region into training, validation and test sets, and record the split before tuning. Training changes model weights; validation picks prompts, confidence thresholds, tile sizes and cleanup settings; the test set is scored once, with everything frozen. For a fair comparison every method uses the same imagery, bands, resolution, AOIs and outline convention. A vendor layer from another survey date is a different comparison and should be reported as one.
 
+Review held-out labels against the imagery without viewing predictions, agreement layers or model-selected candidates. Check the entire AOI, record coverage and uncertain or excluded areas, then freeze the reviewed file before scoring. Candidate layers can support a separate investigation after the blind review; using them to select or correct held-out labels would bias the evaluation.
+
 ## 3. Record the human input for each method
 
 | Method | Input beyond the image | Comparison group |
@@ -69,6 +71,12 @@ Freeze confidence thresholds, matching rules and cleanup settings before looking
 
 Report the IoU of matched pairs for shape, alongside recall so that missed buildings stay visible, and mark undefined ratios rather than treating them as perfect. Report merges, splits and area bias, and break errors down by area and difficulty. Keep assisted and oracle-prompted results in their own groups, with their prompting effort, and record the time each stage took and on what hardware.
 
+An area summary and a filtered evaluation are different experiments. `--size-bins-m2` summarizes one global matching by each object's own area; a matched pair can cross a bin boundary. `--min-area-m2 20` removes predictions and reference polygons below 20 m² after AOI handling and before matching. Use the latter to reproduce a protocol that filters both sets before matching, and keep the all-size run separate. Reports record the area filter and its exclusions so comparisons cannot silently mix these policies.
+
+The [Lewisville scoring audit](../results/lewisville/scoring_audit.md) also distinguishes the historical ≥20 m² rows, which can be reconstructed by retaining only global matched pairs whose two objects meet the threshold. That numerical reconstruction does not prove the historical execution order and differs from independently summarizing each side's global matches.
+
+With an older inventory, FP and FN describe disagreement with that inventory. Two models agreeing on an unmatched outline produces a review candidate, not proof of a new or changed building. Inventory omissions, roof-versus-ground conventions, registration differences and shared model errors are alternatives. A footprint over an apparently empty area is an observation requiring review; imagery from one date does not establish when or whether a demolition occurred.
+
 **Record for every run:** run ID, method and repository commit; input hashes, capture date, CRS, resolution and AOI; reference version, outline convention and reviewer; model file, hash and upstream commit; environment, GPU and drivers; prompts, confidence thresholds, tile size and overlap; cleanup settings; and scoring settings and timings. Report a method that was not run as "Not run", never as a zero, and add rows for new variants instead of replacing poor results.
 
 ## How the code enforces this
@@ -79,6 +87,7 @@ Report the IoU of matched pairs for shape, alongside recall so that missed build
 - **Traceable, resumable runs.** Tile, prompt, manifest and checkpoint hashes form a run signature. `--resume` refuses to continue after any change, and per-tile receipts with atomic writes make an interrupted run safe to pick up. ([`inference.py`](../src/nearmap_buildings/inference.py))
 - **Training data without leakage.** Splits come from drawn regions, never random tiles; overlapping or too-close splits and buildings crossing them are refused. Masks are COCO RLE, which keeps holes, plus `uint32` instance rasters that stay correct past 255 buildings per tile. ([`training.py`](../src/nearmap_buildings/training.py))
 - **Comparable by construction.** Reports carry fingerprints of the predictions, reference and AOI, and `nbf compare` refuses reports that differ. The per-building view also checks the reference's row order, since a re-sorted file would put each method's results on the wrong buildings. ([`compare.py`](../src/nearmap_buildings/compare.py))
+- **Review receipts for accuracy runs.** An optional `--review-receipt` binds an independent-holdout evaluation to a ready review record with matching reference and AOI fingerprints and the `exclude` edge policy. It preserves reviewer, review date, imagery date, label convention, coverage and independence attestations. These are human assertions; the software cannot perform or prove a blind review. The accuracy config requires this receipt. ([`review.py`](../src/nearmap_buildings/review.py), [`evaluation.py`](../src/nearmap_buildings/evaluation.py))
 - **Safe defaults.** Model runs are dry runs until `--execute`, checkpoints load with `torch.load(weights_only=True)`, and commands never overwrite their inputs. Fine-tuned weights need an explicit export, because the inference loader would otherwise accept a training checkpoint while silently ignoring its weights.
 - **Real GIS machines.** `nbf` clears inherited `PROJ_LIB`, `PROJ_DATA` and `GDAL_DATA` for its own process, so a PostGIS install cannot override the projection database bundled with the wheels, while ArcPy keeps its own settings. ([`cli.py`](../src/nearmap_buildings/cli.py))
 
@@ -98,7 +107,7 @@ Last updated October 2026. This records what has been run, not accuracy.
 
 **Not run yet**
 
-- Scoring against reference outlines reviewed for the 2026 imagery, so there are **no accuracy results** yet: the Lewisville scores are agreement with a 2015 map.
+- Scoring against reference outlines reviewed for the 2026 imagery, so there are **no accuracy results** yet. The Lewisville scores use an inventory dated primarily 2015 or earlier, with 33 undated source features; the [reference provenance](../results/lewisville/reference_provenance.json) distinguishes the 38,924 source features from the 38,882 evaluated city-wide outlines.
 - Fine-tuning on real data, and loading a really fine-tuned checkpoint.
 - Seam merging, `nbf agree` and the chunked Esri commands on the Lewisville imagery; they are covered by synthetic tests.
 - Any licensed Nearmap AI layer.

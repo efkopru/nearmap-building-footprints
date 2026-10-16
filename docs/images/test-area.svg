@@ -13,17 +13,17 @@
 <line x1="740" y1="120" x2="740" y2="266" stroke="#e1e0d9" stroke-width="1"/>
 <text x="740" y="284" font-size="12" font-weight="400" text-anchor="middle" fill="#898781">100%</text>
 <text x="32" y="143" font-size="15" font-weight="600" text-anchor="start" fill="#0b0b0b">Recall</text>
-<text x="32" y="163" font-size="13" font-weight="400" text-anchor="start" fill="#898781">buildings found, of 471 on the 2015 map</text>
+<text x="32" y="163" font-size="13" font-weight="400" text-anchor="start" fill="#898781">buildings found, of 471 inventory outlines</text>
 <path d="M300 128h411.711a4 4 0 0 1 4 4v10a4 4 0 0 1 -4 4h-411.711z" fill="#e34948"/>
 <text x="723.711" y="142" font-size="13" font-weight="600" text-anchor="start" fill="#0b0b0b">94%</text>
 <path d="M300 150h397.699a4 4 0 0 1 4 4v10a4 4 0 0 1 -4 4h-397.699z" fill="#2a78d6"/>
 <text x="709.699" y="164" font-size="13" font-weight="600" text-anchor="start" fill="#0b0b0b">91%</text>
 <text x="32" y="219" font-size="15" font-weight="600" text-anchor="start" fill="#0b0b0b">Precision</text>
-<text x="32" y="239" font-size="13" font-weight="400" text-anchor="start" fill="#898781">outlines that match the 2015 map</text>
+<text x="32" y="239" font-size="13" font-weight="400" text-anchor="start" fill="#898781">outlines that match the inventory</text>
 <path d="M300 204h420.729a4 4 0 0 1 4 4v10a4 4 0 0 1 -4 4h-420.729z" fill="#e34948"/>
 <text x="732.729" y="218" font-size="13" font-weight="600" text-anchor="start" fill="#0b0b0b">97%</text>
 <path d="M300 226h358.452a4 4 0 0 1 4 4v10a4 4 0 0 1 -4 4h-358.452z" fill="#2a78d6"/>
 <text x="670.452" y="240" font-size="13" font-weight="600" text-anchor="start" fill="#0b0b0b">82%</text>
-<text x="32" y="316" font-size="12" font-weight="400" text-anchor="start" fill="#898781">Buildings of 20 m² and up. SAM 3 draws more outlines the 2015 map lacks; some may be new buildings.</text>
+<text x="32" y="316" font-size="12" font-weight="400" text-anchor="start" fill="#898781">Historical scores for at least 20 m²; see the scoring audit. Unmatched outlines need independent review.</text>
 <text x="32" y="333" font-size="12" font-weight="400" text-anchor="start" fill="#898781">Esri Mask R-CNN: the city's run of Esri's Building Footprint Extraction – USA model.</text>
 </svg>

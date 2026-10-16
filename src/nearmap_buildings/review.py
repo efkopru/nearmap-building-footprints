@@ -1,7 +1,7 @@
 """Check a reviewed reference layer against the inventory it was reviewed from.
 
-A person reviews the old outlines against the imagery: adds new buildings, removes
-demolished ones and corrects changed ones. This reports what the review changed
+A person reviews the old outlines against the imagery: adds missing buildings,
+removes unsupported outlines and corrects geometry. This reports what the review changed
 (added, removed, modified, unchanged), flags outlines nbf evaluate would refuse or
 that overlap each other, and writes a provenance record. It never edits labels:
 reviewed outlines must come from a person, not from a model, to stay independent.
@@ -117,6 +117,8 @@ def review_check(original: gpd.GeoDataFrame, reviewed: gpd.GeoDataFrame, aoi: gp
     summary = {
         "schema_version": 1,
         "purpose": "What a manual review of an existing inventory changed. The reviewed layer is an independent reference only if a person drew or checked every outline against the imagery; this check cannot establish that.",
+        "change_interpretation": "Added, removed and modified describe edits to the reference, not verified construction, demolition or dates of change.",
+        "edge_policy": "exclude",
         "metric_crs": target.to_string(), "match_iou": match_iou, "unchanged_iou": unchanged_iou,
         "min_overlap_m2": min_overlap_m2,
         # Equal to reference_fingerprint in nbf evaluate reports made from this reviewed file.
@@ -153,8 +155,13 @@ def main(argv=None):
     parser.add_argument("--unchanged-iou", type=float, default=0.95)
     parser.add_argument("--min-overlap-m2", type=float, default=0.5)
     parser.add_argument("--reviewer", help="recorded in the provenance")
+    parser.add_argument("--review-date", help="date the human review was completed, YYYY-MM-DD")
     parser.add_argument("--imagery-date", help="capture date the outlines were reviewed against, e.g. 2026-05")
     parser.add_argument("--label-convention", help="e.g. 'roof outline; sheds and carports included from 4 m2'")
+    parser.add_argument("--coverage-complete", action="store_true",
+                        help="attest that a person reviewed the entire AOI, including areas without old outlines")
+    parser.add_argument("--independent-review", action="store_true",
+                        help="attest that the held-out labels were reviewed without seeing model outputs")
     parser.add_argument("--output-json", required=True, type=Path)
     parser.add_argument("--output-gpkg", type=Path, help="added, removed, modified, unchanged, problems, overlaps")
     args = parser.parse_args(argv)
@@ -163,8 +170,10 @@ def main(argv=None):
     if len(set(outputs)) != len(outputs) or any(path.exists() or path in inputs for path in outputs):
         parser.error("outputs must be new, distinct files")
     read = lambda path, layer: gpd.read_file(path, **({"layer": layer} if layer else {}))  # noqa: E731
-    provenance = {key: value for key, value in (("reviewer", args.reviewer), ("imagery_date", args.imagery_date),
+    provenance = {key: value for key, value in (("reviewer", args.reviewer), ("review_date", args.review_date),
+                                                ("imagery_date", args.imagery_date),
                                                 ("label_convention", args.label_convention)) if value}
+    provenance.update(coverage_complete=args.coverage_complete, independent_review=args.independent_review)
     summary, layers = review_check(read(args.original, args.original_layer), read(args.reviewed, args.reviewed_layer),
                                    read(args.aoi, args.aoi_layer), crs=args.metric_crs, match_iou=args.match_iou,
                                    unchanged_iou=args.unchanged_iou, min_overlap_m2=args.min_overlap_m2,

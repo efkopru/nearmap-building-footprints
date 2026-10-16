@@ -20,6 +20,31 @@ HTML = '''<!doctype html><html><head><meta charset="utf-8"></head><body>
 PDF = b"%PDF-1.7\nnew report\n%%EOF\n"
 
 
+def test_legacy_temporal_claims_become_candidates_without_changing_counts():
+    source = "<div>4,923</div>" + "\n".join(old for old, _ in report_pdf.REPORTING_CORRECTIONS)
+    updated = report_pdf.normalize_reporting_language(source)
+    assert "4,923" in updated
+    for old, new in report_pdf.REPORTING_CORRECTIONS:
+        assert old not in updated
+        assert new in updated
+    assert report_pdf.normalize_reporting_language(updated) == updated
+
+
+def test_reporting_corrections_preserve_unrelated_text_and_handle_line_wraps():
+    source = ("<p>Use a new output file.</p><p>Extra outlines are not all errors: many are\n"
+              "buildings built since 2015.</p>")
+    updated = report_pdf.normalize_reporting_language(source)
+    assert "Use a new output file." in updated
+    assert "unmatched outlines need independent review." in updated
+    assert "built since 2015" not in updated
+
+
+def test_public_edition_applies_reporting_corrections():
+    updated = report_pdf.public_edition(HTML.replace("</body>", "<h2>Likely built since 2015</h2></body>"))
+    assert "Model-agreement candidates" in updated
+    assert "Likely built since 2015" not in updated
+
+
 @pytest.fixture
 def report(tmp_path, monkeypatch):
     path = tmp_path / "saved report.html"

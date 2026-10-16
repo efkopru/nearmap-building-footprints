@@ -14,6 +14,7 @@ its licensed imagery, stays out of the repository.
 import argparse
 from html import escape
 from html.parser import HTMLParser
+import re
 import shutil
 import subprocess
 import tempfile
@@ -28,6 +29,37 @@ PUBLIC_EDITION = [
     ("Select a screenshot to see it larger.", "Zoom in on a screenshot to see the full 1000 px image."),
     ("The imagery is licensed from Nearmap: keep this page private.", f"{CREDIT}."),
 ]
+
+# Known wording from the earlier private report. Keep historical numbers and
+# screenshot observations, but do not turn unmatched geometry into dated change.
+# Replacements are targeted and idempotent; unrelated uses of "new" are untouched.
+REPORTING_CORRECTIONS = [
+    ("Likely built since 2015", "Model-agreement candidates"),
+    ("Built since 2015, 300 m square", "Inventory-unmatched area, 300 m square"),
+    ("Two independent models agreeing where the old layer has nothing points to new buildings, such as whole new subdivisions.",
+     "Model agreement without an inventory match identifies review candidates. Inventory omissions, geometry conventions and shared model errors remain possible."),
+    ("many are buildings built since 2015.", "unmatched outlines need independent review."),
+    ("some others have been demolished since 2015.", "missing detections need review and do not establish demolition."),
+    ("mark buildings that have since gone.", "overlap apparently open ground; no demolition date is established."),
+    ("those are counted here as likely built since 2015.", "these are model-agreement candidates, not dated evidence of change."),
+    ("where much has been built or rebuilt since 2015,", "where agreement with the inventory is lower,"),
+    ("building outlines collected in 2015 or earlier", "building inventory, primarily dated 2015 or earlier with 33 undated source features"),
+    ("collected in 2015 or earlier (38,924 outlines, public)",
+     "primarily dated 2015 or earlier (38,924 source outlines, 33 undated; 38,882 evaluated city-wide)"),
+    ("The areas were picked by rule from the city-wide results and avoid the two review areas, so the reviews stay independent of the models.",
+     "The areas were picked by rule outside the two review areas. Held-out annotation must still be completed blind to predictions and these candidate views."),
+    ("For accuracy: review the Old Town and test-area outlines against the 2026 imagery (the review packages are ready), then score the frozen settings against them.",
+     "For accuracy: review both complete AOIs against the 2026 imagery while predictions and agreement candidates are hidden, record a completed review receipt, then score the frozen settings."),
+]
+
+
+def normalize_reporting_language(html):
+    """Correct known unsupported temporal claims in saved legacy report pages."""
+    for old, new in REPORTING_CORRECTIONS:
+        # Saved HTML may wrap a text sentence across source lines.
+        pattern = r"\s+".join(re.escape(part) for part in old.split())
+        html = re.sub(pattern, lambda match: new, html)
+    return html
 
 PRINT_LAYOUT = """
 <style media="print">
@@ -55,6 +87,7 @@ BROWSERS = [
 
 
 def public_edition(html):
+    html = normalize_reporting_language(html)
     for private, public in PUBLIC_EDITION:
         if html.count(private) != 1:
             raise ValueError(f"Expected the report page to contain {private!r} once; has the page changed?")

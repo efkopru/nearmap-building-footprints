@@ -15,7 +15,7 @@
 
 ## Results: Lewisville, Texas
 
-Both models ran on Nearmap's May 2026 imagery of the whole city of Lewisville, Texas, at 10 cm per pixel. Their outlines were compared with the city's own 38,882 building outlines. Those date from 2015, so the scores measure agreement with them, not accuracy.
+Both models ran on Nearmap's May 2026 imagery of the whole city of Lewisville, Texas, at 10 cm per pixel. Their outlines were compared with 38,882 evaluated outlines from the city's 38,924-feature inventory. Its collection dates are primarily 2015 or earlier, with 33 source features undated; see the [reference provenance](results/lewisville/reference_provenance.json). The scores measure agreement with that inventory, not accuracy against the 2026 imagery.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/efkopru/nearmap-building-footprints/main/docs/images/found-by-size-dark.svg">
@@ -29,7 +29,7 @@ Both models ran on Nearmap's May 2026 imagery of the whole city of Lewisville, T
 
 - **Buildings of 100 m² and up:** both models find about 9 in 10 (recall 0.94 for Esri's model, 0.90 for SAM 3).
 - **Small structures:** both miss almost all of those under 20 m². Between 20 and 50 m², SAM 3 finds more than Esri's model.
-- **Likely new buildings:** SAM 3 draws more outlines that have no 2015 match. About 4,900 of them are also drawn by Esri's model, so many are probably buildings built since 2015.
+- **Candidates for review:** about 4,900 SAM 3 outlines without an inventory match also match Esri's model. These may reflect inventory omissions, different outline conventions, changed structures or shared model errors. Agreement alone does not establish construction or demolition dates.
 
 The [full results](https://github.com/efkopru/nearmap-building-footprints/blob/main/results/lewisville/README.md) have every number, and the [PDF report](https://github.com/efkopru/nearmap-building-footprints/blob/main/results/lewisville/Lewisville_building_footprint_comparison.pdf) shows both models on the imagery.
 
@@ -91,4 +91,4 @@ Your imagery and results go in `data/` and `outputs/`, which git ignores.
 
 ## License
 
-The code is MIT licensed. No imagery, labels, model weights or model outputs are included, and the tool never downloads imagery or calls paid APIs. This is an independent project, not affiliated with or endorsed by Nearmap, Meta, Esri or the SamGeo project.
+The code is MIT licensed. Source rasters, label datasets, model weights and vector outputs stay local; the PDF contains credited Nearmap imagery screenshots. The tool never downloads imagery or calls paid APIs. This is an independent project, not affiliated with or endorsed by Nearmap, Meta, Esri or the SamGeo project.
