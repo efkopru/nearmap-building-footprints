@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="840" height="344" viewBox="0 0 840 344" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
 <rect x="0.5" y="0.5" width="839" height="343" rx="12" fill="#1a1a19" stroke="#2c2c2a"/>
-<text x="32" y="44" font-size="21" font-weight="700" text-anchor="start" fill="#ffffff">On the held-out test area, both models find over 9 in 10 buildings</text>
-<text x="32" y="70" font-size="14" font-weight="400" text-anchor="start" fill="#c3c2b7">A 700 m square set aside until the settings were frozen, then scored once</text>
+<text x="32" y="44" font-size="21" font-weight="700" text-anchor="start" fill="#ffffff">Historical test-area inventory agreement</text>
+<text x="32" y="70" font-size="14" font-weight="400" text-anchor="start" fill="#c3c2b7">Frozen settings against inventory outlines in the 700 m test square</text>
 <rect x="32" y="91" width="14" height="14" rx="3" fill="#e66767"/>
 <text x="54" y="103" font-size="14" font-weight="400" text-anchor="start" fill="#c3c2b7">Esri Mask R-CNN</text>
 <rect x="205" y="91" width="14" height="14" rx="3" fill="#3987e5"/>

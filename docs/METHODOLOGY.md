@@ -33,6 +33,8 @@ Split the AOIs by region into training, validation and test sets, and record the
 
 Review held-out labels against the imagery without viewing predictions, agreement layers or model-selected candidates. Check the entire AOI, record coverage and uncertain or excluded areas, then freeze the reviewed file before scoring. Candidate layers can support a separate investigation after the blind review; using them to select or correct held-out labels would bias the evaluation.
 
+For Lewisville, Esad confirmed completion of both reviews on October 15, 2026 (America/Chicago), following the documented rules with no unresolved cases. The reviewer attested that the test-area review used only the aerial imagery and historical outlines, with no exposure to SAM 3 or Esri predictions before or during that review. The reviewed reference inherits the historical inventory's geometry and building identities; it is not a second independently drawn annotation set. The [reviewed results](../results/lewisville/reviewed_2026/README.md) apply to one 700 m test square. Settings were selected against the historical Old Town inventory and remained frozen for this evaluation.
+
 ## 3. Record the human input for each method
 
 | Method | Input beyond the image | Comparison group |
@@ -93,7 +95,7 @@ With an older inventory, FP and FN describe disagreement with that inventory. Tw
 
 ## What has been tested
 
-Last updated October 2026. This records what has been run, not accuracy.
+Last updated October 2026. Software checks and measured results are listed separately from work not yet run.
 
 **Run and passing**
 
@@ -102,12 +104,13 @@ Last updated October 2026. This records what has been run, not accuracy.
 - All four SAM 3 modes against a fake model, which checks prompts, georeferencing and outputs but not the network itself.
 - Checkpoint export and loading with real PyTorch 2.10 on CPU, using a small stand-in model in SAM 3's layout: its weights survive export and load strictly into a fresh model.
 - Real imagery, held locally: SAM 3 with the official checkpoint (its published SHA-256 verified) on an RTX 4050 under WSL2, at a median 0.82 s per 1024 px tile and 5.8 GB peak memory, then across the whole of Lewisville; and Esri's model in ArcGIS Pro 3.7, on one area and then the whole city. The first real Esri run exposed a validation bug (multiband rasters were always rejected), now fixed and tested. The results are in [results/lewisville](../results/lewisville/README.md).
+- Reviewed test-area accuracy on the May 2026 imagery, using frozen predictions and a receipt recording Esad's coverage and independence attestations. The reference has 640 outlines: 600 fully inside the AOI and 40 crossing its edge. The primary evaluation filters both sets to at least 20 m² before matching, leaving 468 reference buildings; a separate all-size run supplies size diagnostics. Results are limited to this single reviewed area and its inherited reference. [Scores and provenance](../results/lewisville/reviewed_2026/README.md) are separate from the historical inventory-agreement results.
 - The [walkthrough notebooks](../notebooks/README.md), on the synthetic demo, with SAM 3 on the GPU and Esri's model in ArcGIS Pro.
 - Esri's 0–100 confidence scale, confirmed in the arcgis 2.4.3 source, and the training recipe and checkpoint conversion, reviewed against Meta's pinned code.
 
 **Not run yet**
 
-- Scoring against reference outlines reviewed for the 2026 imagery, so there are **no accuracy results** yet. The Lewisville scores use an inventory dated primarily 2015 or earlier, with 33 undated source features; the [reference provenance](../results/lewisville/reference_provenance.json) distinguishes the 38,924 source features from the 38,882 evaluated city-wide outlines.
+- Accuracy evaluation across several independent geographic areas or an independently redrawn reference. City-wide results still measure agreement with an inventory dated primarily 2015 or earlier, with 33 undated source features; the [historical reference provenance](../results/lewisville/reference_provenance.json) distinguishes the 38,924 source features from the 38,882 evaluated city-wide outlines.
 - Fine-tuning on real data, and loading a really fine-tuned checkpoint.
 - Seam merging, `nbf agree` and the chunked Esri commands on the Lewisville imagery; they are covered by synthetic tests.
 - Any licensed Nearmap AI layer.

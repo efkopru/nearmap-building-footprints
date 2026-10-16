@@ -1,0 +1,180 @@
+{
+  "schema_version": 1,
+  "purpose": "Aggregate accuracy against independently reviewed test-area roof outlines.",
+  "review": {
+    "reviewer": "Esad",
+    "review_date": "2026-10-15",
+    "timezone": "America/Chicago",
+    "imagery_provider": "Nearmap",
+    "imagery_date": "2026-05",
+    "label_convention": "Visible roof outlines; permanent roofed buildings including detached garages and sheds around 4 m2 or larger; exclude open carports, canopies, pergolas, tents, trailers and vehicles; retain the existing splitting of attached buildings and draw one polygon per separately roofed added building; review every building touching the AOI, with boundary crossings excluded only when scoring.",
+    "coverage_complete": true,
+    "test_area_independent_review": true,
+    "test_area_prior_model_exposure": false,
+    "review_sources": [
+      "May 2026 aerial imagery",
+      "historical building outlines"
+    ],
+    "test_predictions_viewed_before_or_during_review": false,
+    "exceptions": [],
+    "unresolved_cases": [],
+    "areas": {
+      "old_town": {
+        "total_features": 393,
+        "reviewed_fingerprint": "6c9a9de53bf5d53d9e32f9950d4f237ac0b3ba8e9e1c5348873323863b198a15",
+        "aoi_fingerprint": "4c1b8aead02c7320f0c7740727343971daa783da6e206e395f80c14ae06f2145",
+        "reviewed_file_sha256": "dbeeda602f0e874e87e490804ea8cecae3ca1af91690cd94e2dfb745de7b7e8a",
+        "aoi_file_sha256": "fe6a98f542ee47eefebe8b86985ee8472d346dd0216c0b2da9afa368ba5c82ba",
+        "receipt_sha256": "a794cbfd606fdb2445689388b9fd6e1f3a31a66fd05a45eaee4eb0bf8a8dba55",
+        "counts": {
+          "original_in_aoi": 319,
+          "reviewed_in_aoi": 374,
+          "unchanged": 307,
+          "modified": 1,
+          "added": 66,
+          "removed": 11,
+          "reviewed_problems": 0,
+          "original_problems": 0,
+          "reviewed_overlaps": 0
+        },
+        "crossing_aoi_edge": {
+          "original": 22,
+          "reviewed": 19
+        },
+        "id_based_edit_counts": {
+          "added_features_without_original_id": 66,
+          "removed_original_id_count": 14,
+          "retained_original_id_count": 327
+        }
+      },
+      "test_area": {
+        "total_features": 640,
+        "reviewed_fingerprint": "52168160ee8f7454c7d5b6ff646ceb343fa74b1003ab95fdaabaf45dd01ba91d",
+        "aoi_fingerprint": "391a71266bf131b1673a47b7554f2423ea96c55b8bfe34b22d9ecfc8cc893a01",
+        "reviewed_file_sha256": "42c6a78a201f9959db3d9aff34837d0baeb799f50c3b395e595b46971936a034",
+        "aoi_file_sha256": "fa2278ef690eb6cc66cfda5c1f45f9bcb7bfea946313b55c25ae11cb30f0785d",
+        "receipt_sha256": "c18e4a43236286bc4a985343d32b952ee538c0903de9889213819dab0e3b65b2",
+        "counts": {
+          "original_in_aoi": 607,
+          "reviewed_in_aoi": 600,
+          "unchanged": 591,
+          "modified": 5,
+          "added": 4,
+          "removed": 11,
+          "reviewed_problems": 0,
+          "original_problems": 0,
+          "reviewed_overlaps": 0
+        },
+        "crossing_aoi_edge": {
+          "original": 40,
+          "reviewed": 40
+        },
+        "id_based_edit_counts": {
+          "added_features_without_original_id": 3,
+          "removed_original_id_count": 10,
+          "retained_original_id_count": 637
+        }
+      }
+    },
+    "count_interpretation": "Geometric edit counts exclude AOI crossings. ID-based edit counts cover the whole package and are not construction or demolition counts.",
+    "approximate_minimum_label_rule": "Around 4 m2, not a strict 4 m2 cutoff: the test reference includes three outlines below 4 m2 and none below 3 m2; minimum area is approximately 3.499959 m2. No reviewed outlines were altered for scoring."
+  },
+  "evaluation": {
+    "reference_status": "independent_holdout",
+    "metric_crs": "EPSG:26914",
+    "iou_threshold": 0.5,
+    "edge_policy": "exclude",
+    "size_bins_m2": [
+      20,
+      50,
+      100
+    ],
+    "cohorts": {
+      "all_sizes": {
+        "reference": 600,
+        "min_area_m2": null
+      },
+      "at_least_20m2": {
+        "reference": 468,
+        "min_area_m2": 20.0,
+        "min_area_filter_stage": "after_aoi_before_matching"
+      }
+    },
+    "matching": "One-to-one maximum-cardinality matching at IoU >= 0.5, then maximum total IoU.",
+    "area_filter": "For the primary cohort, filter both inputs by metric area >= 20 m2 after AOI exclusions, then match anew.",
+    "size_class_interpretation": "Diagnostic classes from all-size matching. Reference recall and prediction precision use each object's own area; cross-class matches can give different matched-reference and matched-prediction counts. These rows are not the prefiltered primary cohort.",
+    "scope": "One held-out test area; no city-wide accuracy claim or dated change inference."
+  },
+  "execution": {
+    "review_date_local": "2026-10-15",
+    "timezone": "America/Chicago",
+    "started_utc": "2026-10-16T03:10:21.673509+00:00",
+    "completed_utc": "2026-10-16T03:11:31.423739+00:00",
+    "completed_evaluations": 6,
+    "completed_comparisons": 2,
+    "model_inference_rerun": false,
+    "settings_changed": false,
+    "retuned_on_reviewed_labels": false
+  },
+  "evidence_sha256": {
+    "completed_recipe": "5edeb6497ab17d94b17d563b90f985aabc9ebac7ed87bb23ddc29a82c30b3179",
+    "run_record": "6b8aa13fee9547b226b0b1471abbfe38e5d2c8ba05555522bd2b3bd5f074dfe1",
+    "review_completion": "f9e9385e01ff91e3f9fa9d0eca708d5d304016742cfdcdcab44cb2e582a93891",
+    "snapshot_manifest": "5d23fb97e5d25826018a573c92e52d5afaf700ab1e75422677281e9dd03d9c66",
+    "frozen_settings": "c387fbad7ef570e91467df64c2477cf58e05042f7dce0dea7d14a8bfc3344c3b",
+    "review_receipt": "c18e4a43236286bc4a985343d32b952ee538c0903de9889213819dab0e3b65b2",
+    "sam3_run_receipt": "f844b506e037d23be4e938c2bf2e5e4bdacb11cd6871e2f69789286f8aee64ec",
+    "esri_local_merge_receipt": "da1964ba446216c165d1b3db99870a85971bd68f46dd5ca15759b4b24a178b5a",
+    "raw_evaluation_reports": {
+      "all_sizes/sam3": "dd1d383c965622cfc117e78974b7cf128f872250a198837b5be226c45c11da03",
+      "all_sizes/esri_city": "599d5f97075ff15a917f52977d9b673c93e77eb26dc13649f6fa588f04bbcbae",
+      "all_sizes/esri_local": "8dc7b4c3286ad4feb3f2d2b558071fc16799b69fe79272d36b0fc4f3245054a6",
+      "at_least_20m2/sam3": "30f51576fc6ce18fe383432e3c8d0bde99f940cee0861c5edee9ae60d77ac528",
+      "at_least_20m2/esri_city": "caf588680cdc14f775dc7e037fd9df65b4b76ce61fc2c105e34758690fc12d4b",
+      "at_least_20m2/esri_local": "a38d2262db4e9b6baf3a22968db5efe8cbd044c266d27c09a519620e40b22fea"
+    },
+    "frozen_input_audit": "8e84f84737c588213ba8b2be90ff0d8f193c80da927f224586c8d71543a3efbf"
+  },
+  "predictions": {
+    "sam3": {
+      "sha256": "4ee59ccec681065d859b570d13f04a1219d0fa4b84fce3ecb4ea2f94744f23ae",
+      "geometry_fingerprint": "da1e448b3c03e115c565c51ea2f27fdc31157ed3e261aa4aaaffad9b98339393",
+      "input_features": 38911,
+      "historical_report_sha256": "448ddac1760d1f0ea4647795de2dfc3f540534ea41dc32d0b2736c929b9b30ef",
+      "same_geometry_as_historical_agreement": true,
+      "frozen_settings": {
+        "prompt": "building",
+        "tile_px": 1536.0,
+        "threshold": 0.7,
+        "regularize": "off"
+      }
+    },
+    "esri_city": {
+      "sha256": "b27465f805e722a0391dbf39e2331992e3ccd8c689f9ba6f692db992d508b304",
+      "geometry_fingerprint": "bfddbe844e74e0a9c2aeb72ea97437eb38abb171372e449b2131fb0bd23c1971",
+      "input_features": 33587,
+      "historical_report_sha256": "56ef99731b47f80e0142a738850221f3fe059727f363dc313c97c50162704ddf",
+      "same_geometry_as_historical_agreement": true,
+      "frozen_settings": {
+        "prompt": "",
+        "tile_px": null,
+        "threshold": null,
+        "regularize": "off"
+      }
+    },
+    "esri_local": {
+      "sha256": "7611e78972479f7922c31773fd8daa68531b11070772dc70e4e1a487c93a7d8b",
+      "geometry_fingerprint": "3ad20c888928b2107023a5190622a44cfe590109f0a71fe56b37ea3b91aec28f",
+      "input_features": 39840,
+      "historical_report_sha256": "e7d5a28ed4744805e0eec25ea2a846efe1c0148088169ab7126ed5572724af65",
+      "same_geometry_as_historical_agreement": true,
+      "frozen_settings": {
+        "prompt": "",
+        "tile_px": 512.0,
+        "threshold": 0.9,
+        "regularize": "off"
+      }
+    }
+  },
+  "privacy": "Only allowlisted aggregate counts, settings, statements and hashes are published. Geometry, coordinates, feature IDs, imagery and private source paths are excluded."
+}

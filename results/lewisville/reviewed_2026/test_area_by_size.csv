@@ -1,0 +1,13 @@
+cohort,method,method_key,label,kind,size_class,min_m2,max_m2,reference,matched_reference,predictions,matched_predictions,precision,recall,f1
+all_sizes,SAM 3,sam3,sam3,class,<20,0.0,20.0,132,4,7,1,0.14285714285714285,0.030303030303030304,0.05
+all_sizes,SAM 3,sam3,sam3,class,20-50,20.0,50.0,11,4,35,7,0.2,0.36363636363636365,0.25806451612903225
+all_sizes,SAM 3,sam3,sam3,class,50-100,50.0,100.0,5,2,39,5,0.1282051282051282,0.4,0.1941747572815534
+all_sizes,SAM 3,sam3,sam3,class,>=100,100.0,,452,426,448,423,0.9441964285714286,0.9424778761061947,0.9433363696328172
+all_sizes,"Esri, city run",esri_city,esri_city,class,<20,0.0,20.0,132,0,0,0,,0.0,0.0
+all_sizes,"Esri, city run",esri_city,esri_city,class,20-50,20.0,50.0,11,0,3,2,0.6666666666666666,0.0,0.0
+all_sizes,"Esri, city run",esri_city,esri_city,class,50-100,50.0,100.0,5,3,15,9,0.6,0.6,0.6
+all_sizes,"Esri, city run",esri_city,esri_city,class,>=100,100.0,,452,442,443,434,0.9796839729119639,0.9778761061946902,0.9787792047431717
+all_sizes,"Esri, local raw run",esri_local,esri_local,class,<20,0.0,20.0,132,4,7,4,0.5714285714285714,0.030303030303030304,0.05755395683453238
+all_sizes,"Esri, local raw run",esri_local,esri_local,class,20-50,20.0,50.0,11,3,8,4,0.5,0.2727272727272727,0.3529411764705882
+all_sizes,"Esri, local raw run",esri_local,esri_local,class,50-100,50.0,100.0,5,2,17,5,0.29411764705882354,0.4,0.33898305084745767
+all_sizes,"Esri, local raw run",esri_local,esri_local,class,>=100,100.0,,452,419,427,415,0.9718969555035128,0.9269911504424779,0.9489130761024085

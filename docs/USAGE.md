@@ -222,10 +222,12 @@ It matches the two methods' outlines one to one and writes `both` and `only_<lab
 **Turn an old map into a reviewed reference.** A person must check the entire AOI against the imagery, including missing structures and uncertain areas, while keeping predictions and agreement candidates hidden. Work in GIS on a copy, freeze the reviewed labels and record the coverage and outline convention. Running a command or supplying an attestation does not perform this review. Only after completing it, record the actual reviewer and review date:
 
 ```bash
-nbf review-check --original data/reference/lewisville_2015.gpkg --reviewed data/reference/test_area_reviewed.gpkg --aoi data/reference/test_area_aoi.gpkg --metric-crs EPSG:26914 --reviewer "ACTUAL_REVIEWER" --review-date YYYY-MM-DD --imagery-date 2026-05 --label-convention "roof outline; every structure of 4 m2 and up" --coverage-complete --independent-review --output-json outputs/accuracy/review_check.json --output-gpkg outputs/accuracy/review_check.gpkg
+nbf review-check --original data/lewisville/test_area/reference_2015_subset.gpkg --original-layer buildings --reviewed data/reference/test_area_reviewed.gpkg --aoi data/reference/test_area_aoi.gpkg --metric-crs EPSG:26914 --reviewer "ACTUAL_REVIEWER" --review-date YYYY-MM-DD --imagery-date 2026-05 --label-convention "roof outlines; permanent roofed buildings around 4 m2 and up; open carports excluded" --coverage-complete --independent-review --output-json outputs/accuracy/review_check.json --output-gpkg outputs/accuracy/review_check.gpkg
 ```
 
 Replace the placeholders with the completed review's facts. Use `--coverage-complete` and `--independent-review` only when those statements are true. The check counts `unchanged`, `modified`, `added` and `removed` geometries, flags geometry problems and overlaps, and records provenance. These change categories describe edits to the inventory, not construction or demolition dates.
+
+The check pairs original and reviewed geometries by overlap, not by their source IDs. A retained building redrawn below the default 0.5 IoU matching threshold can appear as one added and one removed outline. Matched pairs below 0.95 IoU count as modified; smaller edits count as unchanged. Only fully contained outlines enter these counts under the default edge policy. Keep any ID-based edit audit separate and record its scope and thresholds.
 
 For the accuracy workflow, pass the resulting receipt explicitly:
 
@@ -233,7 +235,9 @@ For the accuracy workflow, pass the resulting receipt explicitly:
 nbf evaluate --predictions outputs/lewisville/city/sam3_building_1536/cleaned.gpkg --predictions-layer cleaned --reference data/reference/test_area_reviewed.gpkg --aoi data/reference/test_area_aoi.gpkg --metric-crs EPSG:26914 --independent-holdout --review-receipt outputs/accuracy/review_check.json --min-area-m2 20 --output-json outputs/accuracy/sam3/evaluation.json
 ```
 
-`--review-receipt` is optional for general evaluation but required by the [accuracy config](../configs/accuracy.example.json). It requires a ready receipt, complete provenance and affirmative coverage/independence attestations, matching reference and AOI fingerprints, `--independent-holdout`, and the default `exclude` edge policy. A stale or unrelated receipt is refused. The config is a template that must be filled from an actual human review; it does not certify one automatically. No Lewisville accuracy result exists until that review and the frozen evaluation are complete.
+`--review-receipt` is optional for general evaluation but required by the [accuracy config](../configs/accuracy.example.json). It requires a ready receipt, complete provenance and affirmative coverage/independence attestations, matching reference and AOI fingerprints, `--independent-holdout`, and the default `exclude` edge policy. A stale or unrelated receipt is refused. The config is a template that must be filled from an actual human review; it does not certify one automatically.
+
+The [Lewisville reviewed test results](../results/lewisville/reviewed_2026/README.md) use this workflow after Esad's October 15, 2026 review. The primary run filters both datasets at 20 m² before matching. A second run without that filter provides all-size metrics and size-class diagnostics. Settings remain those selected using the historical Old Town inventory; the reviewed test results were not used to retune them. Public files contain aggregate scores and sanitized provenance. Imagery, reviewed labels, full receipts and matched geometries stay local.
 
 ## 9. Fine-tune SAM 3
 
