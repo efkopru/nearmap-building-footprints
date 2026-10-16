@@ -2,6 +2,8 @@
 
 These results score the three frozen methods against a reference reviewed for the May 2026 Nearmap imagery. They cover one seeded-random 700 m test square. The [historical results](../README.md#historical-inventory-agreement) remain agreement with the older inventory and have not been overwritten.
 
+**Completed October 15, 2026:** reference review [#2](https://github.com/efkopru/nearmap-building-footprints/issues/2) and evaluation [#3](https://github.com/efkopru/nearmap-building-footprints/issues/3) are closed following merged [PR #29](https://github.com/efkopru/nearmap-building-footprints/pull/29). This directory is the frozen baseline. The remaining small-building fine-tuning work in [#4](https://github.com/efkopru/nearmap-building-footprints/issues/4) is deferred and must use separate training, validation and fresh test data.
+
 ## Review and reference
 
 Esad confirmed completion of the Old Town and test-area reviews on October 15, 2026, in America/Chicago. The reviewer confirmed following the documented rules, completing both areas with no unresolved cases, and using only aerial imagery and historical outlines for the test review, without seeing SAM 3 or Esri predictions before or during it. Coverage and independence are reviewer attestations. Geometry checks cannot establish them.
@@ -44,3 +46,5 @@ Precision is the proportion of evaluated predictions matched to the reviewed ref
 Imagery, reviewed labels, full receipts, prediction geometry and per-building matches remain local and outside Git. Public aggregates and fingerprints permit provenance checks but do not supply the source data needed to reproduce the geometric evaluation. The [usage guide](../../../docs/USAGE.md#8-score-and-compare) documents review receipts and both scoring modes. Historical CSVs, the original reference snapshot and the [historical scoring audit](../scoring_audit.md) are preserved separately.
 
 With the frozen local evidence available, run `python scripts/publish_reviewed_accuracy.py --check` from the repository root to verify these three exports. The [exporter](../../../scripts/publish_reviewed_accuracy.py) checks source bindings and completed-run records without rerunning inference or evaluation. It refuses to overwrite existing exports.
+
+The [accuracy recipe](../../../configs/accuracy.example.json) records the six evaluations and two comparisons used for these results. Its output paths belong to the completed run; do not rerun it over those artifacts. Future experiments need separate output directories, new input and review records, and a fresh test cohort. Preserve this test reference and its scores rather than using them to select fine-tuning settings.

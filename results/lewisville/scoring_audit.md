@@ -2,6 +2,8 @@
 
 Audited locally on 2026-10-15. This records evidence from existing files; it does not change historical scores, establish extraction accuracy, or reconstruct an unrecorded acquisition history.
 
+**Later results, 2026-10-15:** the completed human review and frozen accuracy evaluation are published separately in [reviewed_2026](reviewed_2026/README.md), following merged [PR #29](https://github.com/efkopru/nearmap-building-footprints/pull/29). The original reference counts, review-package counts and historical scoring evidence below retain their original meaning; they are not counts for the newly reviewed snapshot.
+
 ## Reference snapshot
 
 The saved source export records [3D_Buildings_082020, FeatureServer layer 0](https://services2.arcgis.com/kXGqZY4GIOcEYxoF/arcgis/rest/services/3D_Buildings_082020/FeatureServer/0). Its coordinate metadata is EPSG:2276. The name `082020` is not the collection date of every building.

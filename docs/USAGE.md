@@ -4,6 +4,8 @@ Every command in this guide works on local files. Nothing downloads imagery, cal
 
 Start small. Run the demo first, then a few tiles of real imagery, before a whole city. The [methodology](METHODOLOGY.md) explains why each step works the way it does.
 
+**Lewisville status, October 15, 2026.** Reference review [#2](https://github.com/efkopru/nearmap-building-footprints/issues/2) and accuracy evaluation [#3](https://github.com/efkopru/nearmap-building-footprints/issues/3) are complete, and [PR #29](https://github.com/efkopru/nearmap-building-footprints/pull/29) is merged. The existing review and accuracy outputs are frozen. Fine-tuning [#4](https://github.com/efkopru/nearmap-building-footprints/issues/4) is deferred; [section 9](#9-fine-tune-sam-3) describes the remaining preparation. Commands below are workflow examples, not a request to rerun completed evaluations.
+
 1. [Install](#1-install)
 2. [Try the demo](#2-try-the-demo)
 3. [Prepare your imagery](#3-prepare-your-imagery)
@@ -237,11 +239,20 @@ nbf evaluate --predictions outputs/lewisville/city/sam3_building_1536/cleaned.gp
 
 `--review-receipt` is optional for general evaluation but required by the [accuracy config](../configs/accuracy.example.json). It requires a ready receipt, complete provenance and affirmative coverage/independence attestations, matching reference and AOI fingerprints, `--independent-holdout`, and the default `exclude` edge policy. A stale or unrelated receipt is refused. The config is a template that must be filled from an actual human review; it does not certify one automatically.
 
-The [Lewisville reviewed test results](../results/lewisville/reviewed_2026/README.md) use this workflow after Esad's October 15, 2026 review. The primary run filters both datasets at 20 m² before matching. A second run without that filter provides all-size metrics and size-class diagnostics. Settings remain those selected using the historical Old Town inventory; the reviewed test results were not used to retune them. Public files contain aggregate scores and sanitized provenance. Imagery, reviewed labels, full receipts and matched geometries stay local.
+The [Lewisville reviewed test results](../results/lewisville/reviewed_2026/README.md) use this workflow after Esad's October 15, 2026 review. The primary run filters both datasets at 20 m² before matching. A second run without that filter provides all-size metrics and size-class diagnostics. Settings remain those selected using the historical Old Town inventory; the reviewed test results were not used to retune them. Public files contain aggregate scores and sanitized provenance. Imagery, reviewed labels, full receipts and matched geometries stay local. Preserve those completed outputs. For a new experiment, use a new reference version, receipt and output directory instead of reusing the completed paths shown above.
 
 ## 9. Fine-tune SAM 3
 
-Fine-tuning is optional and has not been run on real data yet. It needs exhaustive, reviewed building outlines.
+Fine-tuning is optional and has not been run on real data yet. It is the remaining work in [issue #4](https://github.com/efkopru/nearmap-building-footprints/issues/4), currently deferred. The examples below describe files to prepare: `data/labels/` and `data/training/` are not supplied training datasets, and new Lewisville labeling packages have not been prepared.
+
+**Resume with new areas and labels.**
+
+1. Draw geographically separate training, validation and fresh test AOIs. Include neighborhoods with small sheds and detached garages, larger buildings and background without buildings. Record the split and separation distance before training. Keep the already-scored test area frozen and out of training or setting selection.
+2. Review every building touching each AOI against its imagery. Use visible roof outlines for permanent roofed buildings, including garages and sheds around 4 m² or larger. Exclude open carports, canopies, pergolas, tents, trailers and vehicles. Keep separately roofed buildings separate, retain a consistent convention for attached buildings, and record uncertain cases or exclusions. The 20 m² reporting threshold is not a labeling cutoff.
+3. Review the fresh test labels without viewing model predictions or agreement candidates, including before the review. Record the reviewer, imagery date, outline convention, complete coverage and any prior model exposure. Resolve uncertain cases and geometry problems, then freeze the labels and their provenance before scoring.
+4. Prepare complete labels for training and validation too. Labeling only small structures would make unlabeled houses look like background during training. Inspect prepared instance masks over their imagery before launching a hardware pilot.
+
+The completed Old Town and test-area review does not need to be repeated for issues #2 or #3. Old Town is a development area; the completed test area remains evidence for the published frozen methods. Use the new test areas for the fine-tuning experiment, since its design is now informed by the published test results.
 
 **Prepare training data.** Supply the tile manifest, your outlines, and a polygon layer with a `split` field of `train`, `val` and `test`:
 
@@ -251,7 +262,7 @@ nbf train prepare-coco --manifest data/tiles/manifest.json --ground-truth data/l
 
 `--labels-complete` confirms that every building in those areas is outlined, since a missing one would teach the model it isn't a building. Splits are always by area, never random tiles; overlapping splits, buildings crossing a split and tiles in more than one split are refused (`--skip-unassigned` drops boundary tiles instead). The 100 m gap is only an example. Training tiles must have no missing imagery. Each split gets `images/*.png`, a COCO `annotations.json` with one `building` category (masks as RLE, which keeps holes) and `instances/*.tif` instance rasters. Everything is held in memory, so use a subset that fits in RAM.
 
-**Train.** `configs/sam3_training.example.yaml` targets Meta's SAM 3 commit `2345a4ad109ac29c569da749c91d84f10dc08c40` and follows Meta's Roboflow recipe, validating on `val` and leaving `test` untouched. Batch size, epochs and memory still need a pilot run. In the Linux training environment:
+**Run a hardware pilot, then train.** [`configs/sam3_training.example.yaml`](../configs/sam3_training.example.yaml) targets Meta's SAM 3 commit `2345a4ad109ac29c569da749c91d84f10dc08c40` and follows Meta's Roboflow recipe, validating on `val` and leaving `test` untouched. It starts with training and validation batch sizes of 1 and a 20-epoch template. First copy it to a separate pilot config and reduce the pilot duration and dataset to verify a training step, validation, checkpoint saving and memory use. The 6 GB GPU used for inference has not been shown to fit training; batch size 1 does not guarantee it will. Preserve the pilot record before choosing hardware and a full-run budget. In the Linux training environment:
 
 ```bash
 cp configs/sam3_training.example.yaml /path/to/sam3/sam3/train/configs/buildings.yaml
@@ -270,7 +281,7 @@ This prints the plan; add `--execute` to train. The config must sit inside Meta'
 nbf train export-checkpoint --input /path/to/outputs/sam3-buildings-v1/checkpoints/checkpoint.pt --output /path/to/models/buildings-inference.pt
 ```
 
-The export loads with `torch.load(weights_only=True)`, checks every tensor and writes inference-ready weights plus `buildings-inference.pt.metadata.json` with both files' hashes. Keep the original checkpoint to resume training. The fine-tuned model supports the **text** and **exemplar** modes only; use the original checkpoint for box and point. Score it on your reserved test tiles like any other method:
+The export loads with `torch.load(weights_only=True)`, checks every tensor and writes inference-ready weights plus `buildings-inference.pt.metadata.json` with both files' hashes. Keep the original checkpoint to resume training. The fine-tuned model supports the **text** and **exemplar** modes only; use the original checkpoint for box and point. Select the checkpoint, prompt, confidence threshold and cleanup settings on validation data only, then freeze them. Keep the original pretrained SAM 3 as the control and score both models on the same fresh test imagery and frozen labels. Report all-size and ≥20 m² results separately, plus under-20 m² diagnostics, with the same matching and edge rules for each model. This command prints a four-tile inference plan; it is not a complete test-area evaluation:
 
 ```bash
 nbf infer --manifest data/test-tiles/manifest.json --method text --text building --checkpoint /path/to/models/buildings-inference.pt --bpe-path /path/to/sam3/sam3/assets/bpe_simple_vocab_16e6.txt.gz --output outputs/sam3_finetuned_text --limit 4

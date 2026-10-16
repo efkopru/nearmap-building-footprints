@@ -2,6 +2,8 @@
 
 SAM 3 and Esri's Mask R-CNN building model on Nearmap's May 2026 imagery of Lewisville, Texas (10.16 cm per pixel). **Reviewed accuracy is reported for one held-out test square.** The earlier city-wide, test-area and Old Town inventory comparisons are retained below as historical agreement results. The [PDF report](Lewisville_building_footprint_comparison.pdf) includes the reviewed results and eight existing screenshots of both models on the imagery (imagery: Nearmap, May 2026).
 
+**Status, October 15, 2026:** the reference review ([#2](https://github.com/efkopru/nearmap-building-footprints/issues/2)) and frozen accuracy evaluation ([#3](https://github.com/efkopru/nearmap-building-footprints/issues/3)) are complete. [PR #29](https://github.com/efkopru/nearmap-building-footprints/pull/29) is merged. Small-building fine-tuning ([#4](https://github.com/efkopru/nearmap-building-footprints/issues/4)) is the remaining issue and is deferred; no new labeling packages or training run have been prepared for it.
+
 The historical tables and charts use "2015 inventory" as shorthand for the city's 38,924-feature source, primarily dated 2015 or earlier with 33 undated features. Its 38,882 evaluated city-wide outlines are a separate count; see [reference provenance](reference_provenance.json). Collection dates do not establish individual construction or demolition dates.
 
 Three runs are compared:
@@ -152,12 +154,29 @@ SAM 3 used up to 96% of the GPU's memory, close to the limit but stable through 
 - **Cleanup and scoring:** prediction cleanup uses a 4 m² minimum and duplicate removal. Every method is scored in EPSG:26914 with one-to-one matching at IoU ≥ 0.5 and buildings crossing an area's edge left out. The reviewed primary run additionally filters both sets at 20 m² before matching; its all-size run retains the reviewed reference without another area filter. Historical threshold rows retain the policy limitations documented in the [scoring audit](scoring_audit.md).
 - **Screenshot areas** were picked by a fixed rule and kept at least 500 m from the Old Town and test squares.
 
-## Next steps
+## Deferred work
 
-The October 2026 review and frozen test evaluation are complete. Further experiments need separate references and versions so these test results remain preserved.
+[#4](https://github.com/efkopru/nearmap-building-footprints/issues/4) concerns SAM 3's low recall on small buildings. Work resumes with geographically separate training, validation and fresh test areas that include sheds and detached garages. Every permanent roofed building in those areas needs a label, including houses; labeling only small structures would incorrectly mark other buildings as background. The fresh test review must stay blind to model predictions, and settings must be selected without using its labels. Preserve the completed test area and published results as the frozen baseline rather than using them for training or choosing settings.
 
-1. **For broader accuracy evidence:** review additional geographically separate areas and measure agreement between independent annotators. Keep their labels blind to model outputs and freeze any new settings before scoring them.
-2. **For small structures:** fine-tune a model on independently labelled structures under 20 m²; current recall is low.
-3. **For large buildings:** merge outlines across tile seams, or use larger tiles in commercial areas.
+The technical stages are preparing masks, testing whether a small training pilot fits the available GPU, exporting the resulting checkpoint, and comparing it with the original SAM 3 under a separately frozen evaluation protocol. The existing 6 GB GPU supported inference; that does not establish that it can train the model. This work is deferred, and no additional action is needed for #2 or #3.
 
-**Files:** [reviewed test scores and provenance](reviewed_2026/README.md), [historical reference provenance](reference_provenance.json), [citywide_scores.csv](citywide_scores.csv), [citywide_by_size.csv](citywide_by_size.csv), [test_area_scores.csv](test_area_scores.csv), [old_town_scores.csv](old_town_scores.csv), [old_town_by_size.csv](old_town_by_size.csv), [tuning_final.csv](tuning_final.csv) and the [tuning protocol](tuning_protocol.md). Rebuild the PDF with `python scripts/build_lewisville_report.py` from the repository root; it requires pypdf, Pillow and Edge or Chrome. The [builder](../../scripts/build_lewisville_report.py) uses public aggregate files and the existing PDF's eight screenshots, without the original private report page. The October 2026 revision adds reviewed test results while retaining historical values and screenshots; no new model inference was run.
+Broader geographic validation, a second independent reviewer and large-building tile-seam handling remain possible future research directions. They are not additional open issues or completed results.
+
+## Verify and rebuild published artifacts
+
+Run these commands from the repository root:
+
+```bash
+# Requires the preserved local evaluation evidence; checks without rerunning it.
+python scripts/publish_reviewed_accuracy.py --check
+
+# Uses committed aggregate CSVs to rebuild the public figures.
+python scripts/make_charts.py
+
+# Uses public aggregate data and the existing report's eight screenshots.
+python scripts/build_lewisville_report.py
+```
+
+The PDF builder requires pypdf, Pillow and Edge or Chrome. Public aggregates are enough to rebuild the presentation artifacts, but not to reproduce geometric accuracy scoring without the private inputs. The completed evaluation receipt, predictions and reviewed labels must remain unchanged.
+
+**Files:** [reviewed test scores and provenance](reviewed_2026/README.md), [historical reference provenance](reference_provenance.json), [citywide_scores.csv](citywide_scores.csv), [citywide_by_size.csv](citywide_by_size.csv), [test_area_scores.csv](test_area_scores.csv), [old_town_scores.csv](old_town_scores.csv), [old_town_by_size.csv](old_town_by_size.csv), [tuning_final.csv](tuning_final.csv), the [tuning protocol](tuning_protocol.md) and the [PDF builder](../../scripts/build_lewisville_report.py). The October 2026 revision adds reviewed test results while retaining historical values and screenshots; no new model inference was run.

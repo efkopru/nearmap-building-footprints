@@ -2,6 +2,8 @@
 
 Four walkthroughs of how SAM 3 and Esri's model are run and scored, from raw imagery to a frozen, once-scored result. Each notebook runs on the synthetic demo data from `nbf demo`, so none of them needs licensed imagery, and none contains any. Where the real Lewisville run used different values, the notebook gives them.
 
+**Project status, October 15, 2026:** the real Old Town and test-area reviews and the frozen test evaluation are complete ([#2](https://github.com/efkopru/nearmap-building-footprints/issues/2), [#3](https://github.com/efkopru/nearmap-building-footprints/issues/3), merged [PR #29](https://github.com/efkopru/nearmap-building-footprints/pull/29)). These notebooks remain synthetic walkthroughs; they do not rerun or certify that human review. [Small-building fine-tuning #4](https://github.com/efkopru/nearmap-building-footprints/issues/4) is deferred, and no training notebook or new labeling package has been prepared for it.
+
 | Notebook | What it covers | Environment it was executed in |
 |---|---|---|
 | [01_prepare_imagery](01_prepare_imagery.ipynb) | Inspecting a raster, fixing a mislabelled CRS with a VRT (no resampling), tiling | The CPU environment |
@@ -27,4 +29,6 @@ The demo image is nine flat roofs on a flat background, with exact reference out
 - **SAM 3 finds nothing for the prompt "building":** the flat rectangles don't look like buildings. For "rectangle" it finds some of them, and the rest of notebook 2 cleans and scores that run.
 - **Esri's model finds all nine roofs, but at confidence 0.5 to 0.7:** that is below the 0.9 confidence threshold frozen for Lewisville, so notebook 3 keeps the run's own 0.5 threshold.
 
-The real results are in [results/lewisville](../results/lewisville/README.md), and screenshots of both models on Lewisville's imagery are in its [PDF report](../results/lewisville/Lewisville_building_footprint_comparison.pdf).
+The real results are in [results/lewisville](../results/lewisville/README.md). The [reviewed 2026 test results](../results/lewisville/reviewed_2026/README.md) are distinct from the preserved historical inventory-agreement tables. Screenshots of both models on Lewisville's imagery are in the [PDF report](../results/lewisville/Lewisville_building_footprint_comparison.pdf).
+
+The completed real test labels and results stay frozen. Resuming #4 requires separate training, validation and fresh test areas, labeled for every qualifying building rather than only sheds. Notebook demo outputs are not substitutes for those labels or evidence that model training will fit the inference GPU.

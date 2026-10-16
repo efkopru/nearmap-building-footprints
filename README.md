@@ -43,7 +43,13 @@ The separate all-size evaluation includes 600 reviewed buildings; 40 boundary-cr
 - **Small structures:** recall remains low in the reviewed test area: SAM 3 and the local Esri run each match 4 of 132 outlines under 20 m²; the city Esri run matches none.
 - **Candidates for review:** about 4,900 SAM 3 outlines without an inventory match also match Esri's model. These may reflect inventory omissions, different outline conventions, changed structures or shared model errors. Agreement alone does not establish construction or demolition dates.
 
-The [full results](https://github.com/efkopru/nearmap-building-footprints/blob/main/results/lewisville/README.md) have every number, and the [PDF report](https://github.com/efkopru/nearmap-building-footprints/blob/main/results/lewisville/Lewisville_building_footprint_comparison.pdf) shows both models on the imagery.
+The [full results](https://github.com/efkopru/nearmap-building-footprints/blob/main/results/lewisville/README.md) have every number, and the [PDF report](https://github.com/efkopru/nearmap-building-footprints/blob/main/results/lewisville/Lewisville_building_footprint_comparison.pdf) shows both models on the imagery. The [project summary](portfolio/nearmap-building-footprints.md) and [two-page PDF](portfolio/nearmap-building-footprints.pdf) provide a shorter account of the reviewed results and their limits.
+
+## Project status
+
+As of October 15, 2026, the reference review ([#2](https://github.com/efkopru/nearmap-building-footprints/issues/2)) and frozen accuracy evaluation ([#3](https://github.com/efkopru/nearmap-building-footprints/issues/3)) are complete. [PR #29](https://github.com/efkopru/nearmap-building-footprints/pull/29) is merged. The reviewed references, existing predictions and published scores remain frozen.
+
+The remaining tracked work is [SAM 3 fine-tuning for small buildings (#4)](https://github.com/efkopru/nearmap-building-footprints/issues/4), deferred until a later session. No real-data training or new training-label packages have been completed. Resume by defining separate training, validation and fresh test areas, then reviewing **every building** in those areas, including small sheds and garages. Keep the completed test area out of training and setting selection. The [fine-tuning guide](docs/USAGE.md#9-fine-tune-sam-3) lists the preparation, hardware pilot and evaluation steps.
 
 ## Try it in five minutes
 

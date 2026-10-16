@@ -32,3 +32,11 @@ Recorded before the extended variants below were scored.
 - **Extended cut-offs:** in the preliminary runs the best cut-offs sat at the top of the fixed ranges (0.7 for SAM 3, 0.9 for the local Esri run), so the ranges are extended: SAM 3 adds 0.75, 0.8, 0.85 and 0.9; the local Esri run adds 0.95. This was decided after seeing the preliminary runs.
 - **"Closer to the defaults", made explicit:** the defaults are SAM 3 "building", 1024 px, cut-off 0.5; the local Esri run at 0.5; regularization off. Among variants within 0.01 of the best F1, prefer the fewest settings changed from the defaults, then the smaller cut-off change, then the smaller tile-size change.
 - **Test-area outputs:** each method is scored in the test area from its city-wide run when that run used the frozen settings; otherwise the frozen settings are run on the test area alone.
+
+## Completion record, 2026-10-15
+
+The protocol and Amendment 1 above are preserved as the original record. The human reviews of Old Town and the test area are now complete, and the test area has been scored against the reviewed reference using the existing frozen predictions. No new inference or retuning was performed. [PR #29](https://github.com/efkopru/nearmap-building-footprints/pull/29) is merged, and issues [#2](https://github.com/efkopru/nearmap-building-footprints/issues/2) and [#3](https://github.com/efkopru/nearmap-building-footprints/issues/3) are closed.
+
+The [reviewed results and provenance](reviewed_2026/README.md) document the completed evaluation: the primary run filters both inputs to at least 20 m² before matching, with a separate all-size run. The [historical scoring audit](scoring_audit.md) continues to describe the evidence and limitations of the earlier inventory comparisons; their scores remain unchanged.
+
+Small-building fine-tuning in [#4](https://github.com/efkopru/nearmap-building-footprints/issues/4) is deferred. It requires separate training, validation and fresh test data and a new protocol. The completed test reference must not become training data or be used to choose future settings.
