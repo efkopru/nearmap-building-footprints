@@ -36,5 +36,7 @@ else
 fi
 python -m pip install -e '.[sam]'
 python -m nearmap_buildings.cli doctor
+# outputs/ is ignored by git, so a fresh clone does not have it yet.
+mkdir -p outputs
 python -m pip freeze > outputs/sam3-environment.txt
 printf '%s\n' 'Environment prepared. Obtain SAM 3 checkpoint access separately; validate with a small pilot.'

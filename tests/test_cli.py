@@ -54,3 +54,16 @@ def test_setup_script_passes_no_double_quotes_to_python():
     script = (Path(__file__).resolve().parents[1] / "scripts" / "setup_cpu.ps1").read_text(encoding="utf-8")
     snippets = re.findall(r"-c '((?:[^']|'')*)'", script)
     assert snippets and not any('"' in snippet for snippet in snippets)
+
+
+def test_sam3_setup_script_creates_the_folders_it_writes_into():
+    # Git ignores data/ and outputs/, so a fresh clone has neither. Writing into a
+    # missing folder stopped setup_sam3.sh at its last step, after installing everything.
+    import re
+    from pathlib import Path
+
+    script = (Path(__file__).resolve().parents[1] / "scripts" / "setup_sam3.sh").read_text(encoding="utf-8")
+    written = [(match.start(), match.group(1)) for match in re.finditer(r">\s*([\w.-]+(?:/[\w.-]+)*)/[\w.-]+\s*$", script, flags=re.M)]
+    assert written
+    for position, folder in written:
+        assert f"mkdir -p {folder}\n" in script[:position], f"{folder}/ is written to before it is created"
