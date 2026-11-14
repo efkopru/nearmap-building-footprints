@@ -2,7 +2,7 @@
 
 SAM 3 and Esri's Mask R-CNN building model on Nearmap's May 2026 imagery of Lewisville, Texas (10.16 cm per pixel). **Reviewed accuracy is reported for one held-out test square.** The earlier city-wide, test-area and Old Town inventory comparisons are retained below as historical agreement results. The [PDF report](Lewisville_building_footprint_comparison.pdf) includes the reviewed results and eight existing screenshots of both models on the imagery (imagery: Nearmap, May 2026).
 
-**Status, October 15, 2026:** the reference review ([#2](https://github.com/efkopru/nearmap-building-footprints/issues/2)) and frozen accuracy evaluation ([#3](https://github.com/efkopru/nearmap-building-footprints/issues/3)) are complete. [PR #29](https://github.com/efkopru/nearmap-building-footprints/pull/29) is merged. Small-building fine-tuning ([#4](https://github.com/efkopru/nearmap-building-footprints/issues/4)) is the remaining issue and is deferred; no new labeling packages or training run have been prepared for it.
+**Status:** the reference review and the frozen accuracy evaluation were completed on October 15, 2026. Fine-tuning SAM 3 for small buildings ([#4](https://github.com/efkopru/nearmap-building-footprints/issues/4)) is the one open task and has not started.
 
 The historical tables and charts use "2015 inventory" as shorthand for the city's 38,924-feature source, primarily dated 2015 or earlier with 33 undated features. Its 38,882 evaluated city-wide outlines are a separate count; see [reference provenance](reference_provenance.json). Collection dates do not establish individual construction or demolition dates.
 
@@ -154,13 +154,11 @@ SAM 3 used up to 96% of the GPU's memory, close to the limit but stable through 
 - **Cleanup and scoring:** prediction cleanup uses a 4 m² minimum and duplicate removal. Every method is scored in EPSG:26914 with one-to-one matching at IoU ≥ 0.5 and buildings crossing an area's edge left out. The reviewed primary run additionally filters both sets at 20 m² before matching; its all-size run retains the reviewed reference without another area filter. Historical threshold rows retain the policy limitations documented in the [scoring audit](scoring_audit.md).
 - **Screenshot areas** were picked by a fixed rule and kept at least 500 m from the Old Town and test squares.
 
-## Deferred work
+## Next steps
 
-[#4](https://github.com/efkopru/nearmap-building-footprints/issues/4) concerns SAM 3's low recall on small buildings. Work resumes with geographically separate training, validation and fresh test areas that include sheds and detached garages. Every permanent roofed building in those areas needs a label, including houses; labeling only small structures would incorrectly mark other buildings as background. The fresh test review must stay blind to model predictions, and settings must be selected without using its labels. Preserve the completed test area and published results as the frozen baseline rather than using them for training or choosing settings.
+The open task is [#4](https://github.com/efkopru/nearmap-building-footprints/issues/4): fine-tuning SAM 3 to raise its low recall on small buildings. It needs separate training, validation and fresh test areas in which every building is labeled, and the completed test area must stay out of training and setting selection. The [fine-tuning guide](../../docs/USAGE.md#9-fine-tune-sam-3) lists the steps.
 
-The technical stages are preparing masks, testing whether a small training pilot fits the available GPU, exporting the resulting checkpoint, and comparing it with the original SAM 3 under a separately frozen evaluation protocol. The existing 6 GB GPU supported inference; that does not establish that it can train the model. This work is deferred, and no additional action is needed for #2 or #3.
-
-Broader geographic validation, a second independent reviewer and large-building tile-seam handling remain possible future research directions. They are not additional open issues or completed results.
+Validation in more areas, a second independent reviewer and better handling of large buildings at tile seams are possible later work. None of them is started.
 
 ## Verify and rebuild published artifacts
 

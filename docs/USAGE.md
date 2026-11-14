@@ -4,8 +4,6 @@ Every command in this guide works on local files. Nothing downloads imagery, cal
 
 Start small. Run the demo first, then a few tiles of real imagery, before a whole city. The [methodology](METHODOLOGY.md) explains why each step works the way it does.
 
-**Lewisville status, October 15, 2026.** Reference review [#2](https://github.com/efkopru/nearmap-building-footprints/issues/2) and accuracy evaluation [#3](https://github.com/efkopru/nearmap-building-footprints/issues/3) are complete, and [PR #29](https://github.com/efkopru/nearmap-building-footprints/pull/29) is merged. The existing review and accuracy outputs are frozen. Fine-tuning [#4](https://github.com/efkopru/nearmap-building-footprints/issues/4) is deferred; [section 9](#9-fine-tune-sam-3) describes the remaining preparation. Commands below are workflow examples, not a request to rerun completed evaluations.
-
 1. [Install](#1-install)
 2. [Try the demo](#2-try-the-demo)
 3. [Prepare your imagery](#3-prepare-your-imagery)
