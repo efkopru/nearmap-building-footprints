@@ -2,9 +2,7 @@
 
 SAM 3 and Esri's Mask R-CNN building model on Nearmap's May 2026 imagery of Lewisville, Texas (10.16 cm per pixel). **Reviewed accuracy is reported for one held-out test square.** The earlier city-wide, test-area and Old Town inventory comparisons are retained below as historical agreement results. The [PDF report](Lewisville_building_footprint_comparison.pdf) includes the reviewed results and eight existing screenshots of both models on the imagery (imagery: Nearmap, May 2026).
 
-**Status:** the reference review and the frozen accuracy evaluation were completed on October 15, 2026. Fine-tuning SAM 3 for small buildings ([#4](https://github.com/efkopru/nearmap-building-footprints/issues/4)) is the one open task and has not started.
-
-The historical tables and charts use "2015 inventory" as shorthand for the city's 38,924-feature source, primarily dated 2015 or earlier with 33 undated features. Its 38,882 evaluated city-wide outlines are a separate count; see [reference provenance](reference_provenance.json). Collection dates do not establish individual construction or demolition dates.
+**Status:** the reference review and the frozen accuracy evaluation were completed on October 15, 2026. What is still open is listed under [Next steps](#next-steps).
 
 Three runs are compared:
 
@@ -14,9 +12,9 @@ Three runs are compared:
 
 ## Reviewed test-area accuracy
 
-Esad completed the Old Town and test-area reference reviews on October 15, 2026 (America/Chicago). The reviewer confirmed that the test review used only aerial imagery and historical outlines, without exposure to SAM 3 or Esri predictions before or during review, and that the documented rules were followed with no unresolved cases. The frozen test reference has **640 outlines: 600 fully inside the 700 m square and 40 crossing its edge**. Coverage and independence are human attestations recorded in the [review provenance](reviewed_2026/provenance.json).
+Esad finished reviewing the Old Town and test-area references against the imagery on October 15, 2026. The test review used only the aerial imagery and the historical outlines, with no SAM 3 or Esri predictions seen before or during it, and followed the documented rules with no unresolved cases. Complete coverage and independence are the reviewer's own statements, recorded in the [review provenance](reviewed_2026/provenance.json). The frozen test reference has **640 outlines: 600 fully inside the 700 m square and 40 crossing its edge**.
 
-Settings were selected against the historical Old Town inventory under the [frozen protocol](tuning_protocol.md) and were not retuned on the reviewed test results. The existing predictions were reused. Differences from the historical scores reflect the changed reference and explicit filtering policy, not improved models. The primary evaluation applies the AOI boundary rule, filters both datasets to **at least 20 m² before matching**, then matches one to one at IoU ≥ 0.5 in EPSG:26914. It includes 468 reviewed reference buildings.
+The settings were chosen on the Old Town inventory under the [frozen protocol](tuning_protocol.md) and not retuned here, and the existing predictions were reused. Differences from the historical scores therefore come from the new reference and the explicit area filter, not from better models. The primary evaluation leaves out outlines crossing the square's edge, removes predictions and reference outlines **under 20 m² before matching**, then matches one to one at IoU ≥ 0.5 in EPSG:26914. That leaves 468 reviewed buildings.
 
 | Method | Matched (TP) | Extra (FP) | Missed (FN) | Precision | Recall | F1 | Median IoU |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -29,7 +27,7 @@ Settings were selected against the historical Old Town inventory under the [froz
   <img alt="Bar chart of precision, recall and F1 on the reviewed test area. Buildings of 20 m² and up: Esri city run 0.97, 0.95 and 0.96; Esri local raw run 0.94, 0.90 and 0.92; SAM 3 0.83, 0.92 and 0.87. Counting every size, F1 is 0.84, 0.81 and 0.77." src="https://raw.githubusercontent.com/efkopru/nearmap-building-footprints/main/docs/images/reviewed-test-accuracy.svg">
 </picture>
 
-**Separate all-size evaluation.** The full 600-building reference is matched without a new minimum-area filter. The review convention was approximately 4 m²; its three retained outlines just below 4 m² are included as reviewed. These results are not inferred from the primary run:
+**All sizes.** A separate evaluation, not derived from the one above, matches the full 600-building reference without an area filter. The review drew buildings down to about 4 m², and its three outlines just under that are kept as reviewed:
 
 | Method | Matched (TP) | Extra (FP) | Missed (FN) | Precision | Recall | F1 | Median IoU |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -37,24 +35,28 @@ Settings were selected against the historical Old Town inventory under the [froz
 | SAM 3 | 436 | 93 | 164 | 0.824 | 0.727 | **0.772** | 0.757 |
 | Esri, local raw run | 428 | 31 | 172 | 0.932 | 0.713 | **0.808** | 0.792 |
 
-Of the 132 reviewed outlines under 20 m², SAM 3 and the local Esri run each match 4 (3.0% recall); the city Esri run matches none. Size classes summarize each object's own area in the all-size matching, so a pair can cross a class boundary. Their threshold summaries must not be substituted for the primary before-matching filter. Full-precision [scores](reviewed_2026/test_area_scores.csv), [size diagnostics](reviewed_2026/test_area_by_size.csv) and [scope and provenance](reviewed_2026/README.md) are stored separately.
+Of the 132 reviewed outlines under 20 m², SAM 3 and the local Esri run each match 4 (3.0% recall) and the city's Esri run none. The [size diagnostics](reviewed_2026/test_area_by_size.csv) summarize this all-size matching by each outline's own area, so a matched pair can fall in two classes; they do not replace the filtered evaluation above. Full-precision [scores](reviewed_2026/test_area_scores.csv) and the [scope and provenance](reviewed_2026/README.md) are stored with them.
 
-**Limits.** This is one reviewed test square, with labels corrected from the historical inventory rather than independently redrawn. Its unchanged geometry and building identities remain inherited, and no second reviewer is recorded. The result does not establish city-wide or out-of-area accuracy. Old Town was also reviewed but remains the area used for tuning, not an additional held-out test. Labels, imagery, full receipts and individual matches remain local.
+**Limits.** This is one test square, with labels corrected from the historical inventory rather than redrawn: unchanged outlines and building identities are inherited from it, and no second reviewer is recorded. The result does not establish accuracy city-wide or in other places. Old Town was reviewed too, but it is the area used for tuning, not a second held-out test. Labels, imagery, full receipts and individual matches stay local.
 
 ## Historical inventory agreement
 
-All numbers in the following city-wide, historical test-area and Old Town sections use the older inventory. Their original CSVs are unchanged.
+Everything below predates the review and is scored against the city's public building inventory instead. It has 38,924 source features, dated mostly 2015 or earlier (33 are undated); 38,882 of them are scored city-wide, and the other 42 cross the evaluation boundary or lie outside it ([reference provenance](reference_provenance.json)). The tables and charts call them the "2015 outlines". The original CSVs are unchanged.
+
+**How to read these numbers.** They measure agreement with an older map, not accuracy on the 2026 imagery. An extra outline (a false positive against the inventory) may be a building the inventory lacks, a changed structure, a roof-versus-ground or registration difference, or a model error. A missed outline may be hidden, mapped differently or no longer there. Where both models draw an outline the inventory lacks, that is a candidate to review, not a reference label: both models can make the same mistake. Neither the scores, the screenshots nor the inventory's collection dates show when a building was built or removed.
+
+The main findings:
 
 - **On the historical test-area comparison,** F1 on inventory outlines of 20 m² and up was 0.95 for the city's Esri run, 0.91 for the local Esri run and 0.87 for SAM 3.
 - **Esri leads city-wide,** with F1 0.83 against SAM 3's 0.74 on buildings of 20 m² and up. Both find most of them (recall 0.85 and 0.82), but SAM 3 draws more outlines the 2015 map lacks (precision 0.68 against 0.82).
 - **Small structures are missed.** Of the 7,867 outlines under 20 m², SAM 3 found 267 and the city's Esri run 2.
-- **Model agreement identifies review candidates.** 4,923 SAM 3 outlines without an inventory match also match an Esri outline. These are candidates to inspect, not dated evidence of new or changed buildings.
+- **Model agreement identifies review candidates.** 4,923 SAM 3 outlines without an inventory match also match an Esri outline.
 - **Large buildings break up.** SAM 3 splits buildings longer than a tile where tiles meet, and Esri's outlines are cut at its chip edges.
 - **Settings matter.** Without Esri's post-processing, the same model scores F1 0.77 instead of 0.83. For SAM 3, 1536 px tiles and a confidence threshold of 0.7 raised Old Town F1 from 0.48 to 0.53.
 
 ## Whole city: historical inventory agreement
 
-All three runs went through the same cleanup and were scored against 38,882 inventory outlines within the city-wide evaluation boundary. The 38,924 source features and 42-feature difference are distinct counts; see [provenance](reference_provenance.json). SAM 3 ran on 6,538 tiles; the local Esri run in 150 chunks.
+All three runs went through the same cleanup and were scored against the 38,882 inventory outlines. SAM 3 ran on 6,538 tiles; the local Esri run in 150 chunks.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/efkopru/nearmap-building-footprints/main/docs/images/found-by-size-dark.svg">
@@ -67,7 +69,7 @@ All three runs went through the same cleanup and were scored against 38,882 inve
 | SAM 3 | 37,906 | 25,758 | 12,148 | 13,124 | 0.68 | 0.66 | 0.67 | 0.74 | 0.80 |
 | Esri, local raw run | 38,860 | 26,536 | 12,324 | 12,346 | 0.68 | 0.68 | 0.68 | 0.77 | 0.80 |
 
-Extra outlines are false positives against the inventory. They may reflect omitted structures, changed structures, roof-versus-ground conventions, registration differences or model errors. Model agreement cannot distinguish these explanations by itself. SAM 3's matched outlines fit slightly more tightly (median IoU 0.80 against 0.77).
+SAM 3's matched outlines fit slightly more tightly (median IoU 0.80 against 0.77).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/efkopru/nearmap-building-footprints/main/docs/images/outcomes-by-size-dark.svg">
@@ -81,15 +83,15 @@ Extra outlines are false positives against the inventory. They may reflect omitt
 | 20–50 m² | 2,346 | 194 (8%) | 577 (25%) | 107 | 87 | 470 | 1,682 |
 | under 20 m² | 7,867 | 2 (0%) | 267 (3%) | 1 | 1 | 266 | 7,599 |
 
-Most of the 11,207 outlines missed by both (7,599) are under 20 m². A missing detection does not establish demolition: occlusion, inventory geometry and model errors also need review. Adding the local Esri run, 10,463 are missed by all three.
+Most of the 11,207 outlines missed by both (7,599) are under 20 m². Adding the local Esri run, 10,463 are missed by all three.
 
-**SAM 3 against Esri, without the inventory.** Matched to each other, the two models form 29,567 pairs with a median IoU of 0.81: 91% of Esri's outlines have a SAM 3 partner and 78% of SAM 3's have an Esri one. Agreement on an outline without an inventory match is a review candidate. Both models can reproduce the same error; agreement supplies neither a construction date nor independent reference labels.
+**SAM 3 against Esri, without the inventory.** Matched to each other, the two models form 29,567 pairs with a median IoU of 0.81: 91% of Esri's outlines have a SAM 3 partner and 78% of SAM 3's have an Esri one.
 
-**What the screenshots show.** In a residential area missing from the inventory, both models outline the visible houses. At an apartment complex, Esri outlines long carport rows that SAM 3 mostly misses. In another residential area, SAM 3 outlines more back-yard garages and sheds. Long industrial roofs are split where SAM 3's tiles meet, and some inventory outlines overlap apparently open ground. These are observations in the May 2026 imagery, not verified construction, change or demolition dates.
+**What the screenshots show.** In a residential area missing from the inventory, both models outline the visible houses. At an apartment complex, Esri outlines long carport rows that SAM 3 mostly misses. In another residential area, SAM 3 outlines more back-yard garages and sheds. Long industrial roofs are split where SAM 3's tiles meet, and some inventory outlines overlap apparently open ground.
 
 ## Test area: historical inventory agreement
 
-Each model's settings were frozen first (see [tuning](#old-town-baseline-and-tuning) below), and they are exactly the settings of the city-wide runs. This earlier comparison used the historical inventory in the same seeded-random 700 m test square, before the October 2026 human review. It is preserved separately from the reviewed evaluation above.
+This is the same seeded-random 700 m square as the reviewed evaluation above, scored against the inventory before the October 2026 review. Each model's settings were frozen first (see [tuning](#old-town-baseline-and-tuning) below) and are exactly the settings of the city-wide runs.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/efkopru/nearmap-building-footprints/main/docs/images/test-area-dark.svg">
@@ -102,11 +104,9 @@ Each model's settings were frozen first (see [tuning](#old-town-baseline-and-tun
 | SAM 3 | 430 | 92 | 41 | 0.82 | 0.91 | 0.87 | 0.75 | 0.76 |
 | Esri, local raw run | 422 | 30 | 49 | 0.93 | 0.90 | 0.91 | 0.79 | 0.80 |
 
-Buildings of 20 m² and up, except the last column. Historical inventory agreement was much higher here than in Old Town, with the same ordering of methods. The cause of that difference has not been established. In this historical test comparison, at most 2 of the 136 inventory outlines under 20 m² were found.
+Buildings of 20 m² and up, except the last column. Agreement was much higher here than in Old Town, with the methods in the same order; the cause of that difference has not been established. At most 2 of the 136 inventory outlines under 20 m² were found.
 
-The protocol requires filtering both reference and prediction polygons to at least 20 m² before matching. `nbf evaluate --min-area-m2 20` implements that policy; an all-size run summarized with `--size-bins-m2 20 50 100` retains its global matching and can give different threshold metrics. The historical CSV values are preserved, not replaced by a new run. Their execution policy must be established from evidence, not inferred from the protocol; see the [scoring audit](scoring_audit.md).
-
-The audit reproduces all six published city/test ≥20 m² rows by keeping global matches only when both objects are at least 20 m². A fresh before-matching filter in the small test AOI produces the same counts, so those values do not prove the historical order. The whole city and 176 tuning variants were not rerun with that filter. Generic size-bin summaries use each side's matches separately and need not equal either procedure.
+**How the 20 m² rows were scored.** The protocol requires removing predictions and reference outlines under 20 m² before matching, which `nbf evaluate --min-area-m2 20` now does. The historical CSVs are kept as published. The [scoring audit](scoring_audit.md) reproduces all six of their city and test rows for 20 m² and up by keeping the matches of one all-size matching only when both outlines are at least 20 m². Filtering before matching gives the same counts in the test square, so the numbers do not show which order was used originally. The whole city and the 176 tuning variants were not rerun with the filter.
 
 ## Old Town: baseline and tuning
 
@@ -145,13 +145,13 @@ For SAM 3, bigger tiles and higher confidence thresholds help up to about 0.75; 
 
 SAM 3 used up to 96% of the GPU's memory, close to the limit but stable through the city-wide run.
 
-## Historical runs and shared scoring settings
+## How the runs were made
 
 - **Imagery:** a Nearmap mosaic from May 2026 at 10.16 cm, clipped to the city limits. Its GeoTIFF declared the wrong CRS (a local one in metres); it is EPSG:2276 in US survey feet, fixed with a VRT without resampling and checked against the city limits.
-- **Historical reference:** the City of Lewisville's public inventory, primarily dated 2015 or earlier, with 33 undated source features. It has 38,924 source features and 38,882 evaluated city-wide outlines; [provenance](reference_provenance.json) records the distinction. The report observed alignment to within about 0.4 m; that does not establish label completeness or temporal accuracy. The reviewed test uses the separate October 2026 snapshot described above.
+- **Historical reference:** the City of Lewisville's public inventory [described above](#historical-inventory-agreement). The report observed alignment to within about 0.4 m; that does not establish label completeness or temporal accuracy. The reviewed test uses the separate October 2026 reference.
 - **Esri, city run:** `ExtractFeaturesUsingAIModels` with default settings. **Local raw run:** `DetectObjectsUsingDeepLearning` without non-maximum suppression (NMS); city-wide in 150 overlapping chunks of about 1.1 km, each keeping only the outlines centred in its own core.
 - **SAM 3:** text prompt through SamGeo 1.4.2 at a pinned commit; 1536 px tiles overlapping by 192 px.
-- **Cleanup and scoring:** prediction cleanup uses a 4 m² minimum and duplicate removal. Every method is scored in EPSG:26914 with one-to-one matching at IoU ≥ 0.5 and buildings crossing an area's edge left out. The reviewed primary run additionally filters both sets at 20 m² before matching; its all-size run retains the reviewed reference without another area filter. Historical threshold rows retain the policy limitations documented in the [scoring audit](scoring_audit.md).
+- **Cleanup and scoring:** prediction cleanup uses a 4 m² minimum and duplicate removal. Every method is scored in EPSG:26914 with one-to-one matching at IoU ≥ 0.5, leaving out buildings that cross an area's edge. The 20 m² filter is described with each set of results above.
 - **Screenshot areas** were picked by a fixed rule and kept at least 500 m from the Old Town and test squares.
 
 ## Next steps
