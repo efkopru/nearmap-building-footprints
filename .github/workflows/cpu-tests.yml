@@ -75,6 +75,27 @@ jobs:
           nbf esri-chunks run --chunks data/ci_chunks --gdb outputs/ci_chunks.gdb --done outputs/ci_done --model usa_building_footprints.dlpk
           nbf train prepare-coco --manifest data/ci_tiles/manifest.json --ground-truth data/ci_demo/reference.gpkg --split-aois data/ci_demo/splits.geojson --output data/ci_training --labels-complete --skip-unassigned
 
+  reports:
+    # The PDF builders need packages the main job leaves out, so their tests are skipped there.
+    name: Report builders
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements-cpu.lock
+      - name: Install CPU dependencies and the report packages
+        run: |
+          python -m pip install -r requirements-cpu.lock
+          python -m pip install --no-deps -e .
+          python -m pip install pypdf==7.1.0 pillow==13.0.0 reportlab==5.1.0
+      - name: Test the report builders and rebuild the summary
+        run: |
+          python -m pytest -q -rs tests/test_lewisville_report.py tests/test_report_pdf.py tests/test_charts.py
+          python scripts/build_portfolio_summary.py --output "$RUNNER_TEMP/summary.pdf"
+
   torch:
     # Checkpoint export and loading with real PyTorch; the main job uses a stand-in.
     name: Checkpoints with PyTorch (CPU)

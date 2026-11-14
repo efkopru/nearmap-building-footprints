@@ -177,6 +177,6 @@ python scripts/make_charts.py
 python scripts/build_lewisville_report.py
 ```
 
-The PDF builder requires pypdf, Pillow and Edge or Chrome. Public aggregates are enough to rebuild the presentation artifacts, but not to reproduce geometric accuracy scoring without the private inputs. The completed evaluation receipt, predictions and reviewed labels must remain unchanged.
+The PDF builder requires Edge or Chrome and the report packages: `python -m pip install -e ".[report]"`. Public aggregates are enough to rebuild the presentation artifacts, but not to reproduce geometric accuracy scoring without the private inputs. The completed evaluation receipt, predictions and reviewed labels must remain unchanged.
 
 **Files:** [reviewed test scores and provenance](reviewed_2026/README.md), [historical reference provenance](reference_provenance.json), [citywide_scores.csv](citywide_scores.csv), [citywide_by_size.csv](citywide_by_size.csv), [test_area_scores.csv](test_area_scores.csv), [old_town_scores.csv](old_town_scores.csv), [old_town_by_size.csv](old_town_by_size.csv), [tuning_final.csv](tuning_final.csv), the [tuning protocol](tuning_protocol.md) and the [PDF builder](../../scripts/build_lewisville_report.py). The October 2026 revision adds reviewed test results while retaining historical values and screenshots; no new model inference was run.

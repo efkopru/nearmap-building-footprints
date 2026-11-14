@@ -71,4 +71,4 @@ The frozen reference and published results remain unchanged. Issue #4 requires g
 - [Walkthrough notebooks](../notebooks/README.md)
 - [Repository](https://github.com/efkopru/nearmap-building-footprints)
 
-Rebuild the two-page summary from public CSVs with `python scripts/build_portfolio_summary.py` after installing `reportlab` and `pypdf` in the reporting environment. The builder reads no imagery or private labels, validates the new PDF, then replaces the published summary.
+Rebuild the two-page summary from public CSVs with `python scripts/build_portfolio_summary.py` after installing the report packages with `python -m pip install -e ".[report]"`. The builder reads no imagery or private labels, validates the new PDF, then replaces the published summary.

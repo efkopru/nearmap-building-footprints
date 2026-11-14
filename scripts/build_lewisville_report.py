@@ -2,9 +2,10 @@
 
     python scripts/build_lewisville_report.py
 
-Requires pypdf, Pillow, and Edge or Chrome. The committed PDF supplies its eight
-licensed screenshots; no new imagery or geometry is read. Public CSVs and SVGs
-supply the report. Intermediate HTML and screenshots stay under ignored outputs/.
+Requires Edge or Chrome and the report packages (python -m pip install -e ".[report]").
+The committed PDF supplies its eight licensed screenshots; no new imagery or geometry
+is read. Public CSVs and SVGs supply the report. Intermediate HTML and screenshots
+stay under ignored outputs/.
 The original private report page is not required. A source PDF snapshot is retained
 locally and the destination is replaced only after screenshot identity validation.
 """
