@@ -93,7 +93,7 @@ jobs:
           python -m pip install pypdf==7.1.0 pillow==13.0.0 reportlab==5.1.0
       - name: Test the report builders and rebuild the summary
         run: |
-          python -m pytest -q -rs tests/test_lewisville_report.py tests/test_report_pdf.py tests/test_charts.py
+          python -m pytest -q -rs tests/test_lewisville_report.py tests/test_charts.py
           python scripts/build_portfolio_summary.py --output "$RUNNER_TEMP/summary.pdf"
 
   torch:

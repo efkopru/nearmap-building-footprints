@@ -1,6 +1,10 @@
 import csv
+import hashlib
 import importlib.util
+import json
 from pathlib import Path
+import shutil
+import subprocess
 import sys
 from types import SimpleNamespace
 
@@ -46,24 +50,91 @@ def test_existing_pdf_rebuild_keeps_screenshot_bytes_and_colour_profiles(tmp_pat
     assert report.screenshot_hashes(pypdf.PdfReader(source)) == report.screenshot_hashes(pypdf.PdfReader(checked))
 
 
-def test_failed_screenshot_validation_preserves_existing_report(tmp_path, monkeypatch):
-    source = tmp_path / "report.pdf"
-    source.write_bytes(b"original public report")
+def test_report_credits_the_imagery_and_has_no_private_page_wording():
+    html = report.build_html()
+    assert html.count(report.CREDIT) == 2
+    for wording in ["keep this page private", "Select a screenshot", "IMAGERY_CREDIT"]:
+        assert wording not in html
+
+
+def test_a_browser_path_that_does_not_exist_is_refused(tmp_path):
+    with pytest.raises(FileNotFoundError, match="--browser"):
+        report.find_browser(str(tmp_path / "no-such-browser.exe"))
+
+
+PDF = b"%PDF-1.7 new report"
+
+
+@pytest.fixture
+def source(tmp_path, monkeypatch):
+    """An existing report, with small stand-ins for reading PDFs, the page and the browser."""
     monkeypatch.setitem(sys.modules, "pypdf", SimpleNamespace(PdfReader=lambda path: object()))
     monkeypatch.setattr(report, "screenshot_images", lambda reader: [(0, SimpleNamespace(data=b"image"))] * 8)
     monkeypatch.setattr(report, "build_html", lambda: "<html>prepared report</html>")
+    monkeypatch.setattr(report, "find_browser", lambda explicit: "browser")
+    path = tmp_path / "report.pdf"
+    path.write_bytes(b"original public report")
+    return path
 
-    def render(argv):
-        Path(argv[1]).write_bytes(b"rendered PDF")
 
-    monkeypatch.setitem(sys.modules, "make_report_pdf", SimpleNamespace(main=render))
+def build(source, output, tmp_path):
+    report.main(["--source-pdf", str(source), "--output", str(output), "--work-dir", str(tmp_path / "work")])
+
+
+def print_destination(command):
+    return Path(next(arg.split("=", 1)[1] for arg in command if arg.startswith("--print-to-pdf=")))
+
+
+@pytest.mark.parametrize("written", [None, b"", b"not a PDF", "browser error"])
+def test_failed_print_preserves_existing_report(source, tmp_path, monkeypatch, capsys, written):
+    def browser(command, **kwargs):
+        assert print_destination(command) != source
+        if written == "browser error":
+            raise subprocess.CalledProcessError(1, command)
+        if written is not None:
+            print_destination(command).write_bytes(written)
+
+    monkeypatch.setattr(report.subprocess, "run", browser)
+    with pytest.raises((RuntimeError, subprocess.CalledProcessError)):
+        build(source, source, tmp_path)
+    assert source.read_bytes() == b"original public report"
+    assert "Wrote" not in capsys.readouterr().out
+
+
+def test_failed_screenshot_validation_preserves_existing_report(source, tmp_path, monkeypatch):
+    monkeypatch.setattr(report, "print_pdf", lambda page, destination, browser: destination.write_bytes(PDF))
 
     def reject(*args):
         raise ValueError("Screenshot bytes changed during report generation")
 
     monkeypatch.setattr(report, "preserve_screenshots", reject)
     with pytest.raises(ValueError, match="Screenshot bytes changed"):
-        report.main(["--source-pdf", str(source), "--output", str(source),
-                     "--work-dir", str(tmp_path / "work")])
+        build(source, source, tmp_path)
     assert source.read_bytes() == b"original public report"
     assert len(list((tmp_path / "work").glob("source-*.pdf"))) == 1
+
+
+@pytest.mark.parametrize("existing", [False, True])
+def test_checked_report_creates_or_replaces_the_output(source, tmp_path, monkeypatch, capsys, existing):
+    output = tmp_path / "new folder" / "report.pdf"
+    if existing:
+        output.parent.mkdir()
+        output.write_bytes(b"previous report")
+
+    def browser(command, **kwargs):
+        assert print_destination(command) != output
+        assert command[-1] == (tmp_path / "work" / "report.html").resolve().as_uri()
+        print_destination(command).write_bytes(PDF)
+
+    def keep(baseline, rendered, checked):
+        shutil.copyfile(rendered, checked)
+        return 11
+
+    monkeypatch.setattr(report.subprocess, "run", browser)
+    monkeypatch.setattr(report, "preserve_screenshots", keep)
+    build(source, output, tmp_path)
+    assert output.read_bytes() == PDF
+    assert source.read_bytes() == b"original public report"
+    assert f"Wrote {output}" in capsys.readouterr().out
+    record = json.loads((tmp_path / "work" / "artifact_validation.json").read_text(encoding="utf-8"))
+    assert record["pages"] == 11 and record["output_sha256"] == hashlib.sha256(PDF).hexdigest()
