@@ -15,41 +15,45 @@
 
 ## Results: Lewisville, Texas
 
-Both models ran on Nearmap's May 2026 imagery of Lewisville, Texas, at 10 cm per pixel. **Reviewed accuracy is now measured in one held-out 700 m test square.** Esad completed the reference review on October 15, 2026 and confirmed that the test review used only the imagery and historical outlines, without exposure to SAM 3 or Esri predictions before or during it.
+Both models ran on Nearmap's May 2026 imagery of Lewisville, Texas, at 10 cm per pixel.
 
-For buildings of at least 20 m², both predictions and reference outlines are filtered before matching at IoU ≥ 0.5. The reviewed reference contains 468 buildings in this cohort:
+### Accuracy on a reviewed test area
+
+One 700 m square of the city was kept aside as a test area. Esad, the project's author, checked its building outlines by hand against the 2026 imagery on October 15, 2026, without looking at either model's output. Each model's settings were fixed before the area was scored. These are the scores for its 468 buildings of 20 m² and up:
 
 | Method | Precision | Recall | F1 |
 | --- | ---: | ---: | ---: |
 | Esri, city run | 0.965 | 0.951 | **0.958** |
-| SAM 3 | 0.828 | 0.923 | **0.873** |
 | Esri, local raw run | 0.936 | 0.904 | **0.920** |
+| SAM 3 | 0.828 | 0.923 | **0.873** |
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/efkopru/nearmap-building-footprints/main/docs/images/reviewed-test-accuracy-dark.svg">
-  <img alt="Reviewed test-area accuracy for three frozen methods, showing precision, recall and F1 separately for all sizes and for buildings of at least 20 square metres. Primary F1: city Esri 0.958, SAM 3 0.873 and local Esri 0.920." src="https://raw.githubusercontent.com/efkopru/nearmap-building-footprints/main/docs/images/reviewed-test-accuracy.svg">
+  <img alt="Bar chart of precision, recall and F1 on the reviewed test area. Buildings of 20 m² and up: Esri city run 0.97, 0.95 and 0.96; Esri local raw run 0.94, 0.90 and 0.92; SAM 3 0.83, 0.92 and 0.87. Counting every size, F1 is 0.84, 0.81 and 0.77." src="https://raw.githubusercontent.com/efkopru/nearmap-building-footprints/main/docs/images/reviewed-test-accuracy.svg">
 </picture>
 
-The separate all-size evaluation includes 600 reviewed buildings; 40 boundary-crossing outlines are excluded. These are results for one area and a reference corrected from an inherited inventory. Independence is recorded as the reviewer's attestation. Settings were selected against the historical Old Town inventory and were not retuned on these test results. See the [reviewed scores and provenance](results/lewisville/reviewed_2026/README.md).
+- **Esri's model scores highest.** The city's own run of it, which includes Esri's post-processing, comes first. The same model run locally without that post-processing comes second.
+- **SAM 3 finds nearly as many buildings** (recall 0.92 against 0.95), but more of its outlines have no matching building (precision 0.83 against 0.97).
+- **Small structures are mostly missed.** Of the 132 reviewed outlines under 20 m², SAM 3 and the local Esri run each found 4, and the city's Esri run found none. Counting buildings of every size, 600 in all, F1 falls to 0.84, 0.81 and 0.77.
 
-**Historical city-wide comparison.** The preserved city-wide scores measure agreement with 38,882 evaluated outlines from the city's 38,924-feature inventory. Its dates are primarily 2015 or earlier, with 33 source features undated; see the [historical reference provenance](results/lewisville/reference_provenance.json). They do not establish city-wide accuracy against the 2026 imagery.
+This is one test square checked by one person, starting from the city's older outlines, so it is not a city-wide accuracy figure. The [reviewed results](https://github.com/efkopru/nearmap-building-footprints/blob/main/results/lewisville/reviewed_2026/README.md) have the full scores and describe how the review was done.
+
+### Agreement with the city's older map
+
+The city as a whole has no reviewed outlines, only the city's building inventory, which dates mostly from 2015 or earlier. Scores against 38,882 of its outlines show how well each model agrees with that map, not how accurate it is on the 2026 imagery.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/efkopru/nearmap-building-footprints/main/docs/images/found-by-size-dark.svg">
   <img alt="Bar chart of recall by building area, the share of the 2015 outlines each model found. 100 m² and up: Esri Mask R-CNN 94%, SAM 3 90%. 50 to 100 m²: 52% and 39%. 20 to 50 m²: 8% and 25%. Under 20 m²: 0% and 3%." src="https://raw.githubusercontent.com/efkopru/nearmap-building-footprints/main/docs/images/found-by-size.svg">
 </picture>
 
-- **Historical inventory, buildings of 100 m² and up:** both models find about 9 in 10 (recall 0.94 for Esri's model, 0.90 for SAM 3).
-- **Small structures:** recall remains low in the reviewed test area: SAM 3 and the local Esri run each match 4 of 132 outlines under 20 m²; the city Esri run matches none.
-- **Candidates for review:** about 4,900 SAM 3 outlines without an inventory match also match Esri's model. These may reflect inventory omissions, different outline conventions, changed structures or shared model errors. Agreement alone does not establish construction or demolition dates.
+Both models find about 9 in 10 of the inventory's buildings of 100 m² and up, and few of the small ones. About 4,900 SAM 3 outlines that match nothing in the inventory are also drawn by Esri's model. They are worth reviewing, but two models agreeing does not prove that a building is new.
 
-The [full results](https://github.com/efkopru/nearmap-building-footprints/blob/main/results/lewisville/README.md) have every number, and the [PDF report](https://github.com/efkopru/nearmap-building-footprints/blob/main/results/lewisville/Lewisville_building_footprint_comparison.pdf) shows both models on the imagery. The [project summary](portfolio/nearmap-building-footprints.md) and [two-page PDF](portfolio/nearmap-building-footprints.pdf) provide a shorter account of the reviewed results and their limits.
+The [full results](https://github.com/efkopru/nearmap-building-footprints/blob/main/results/lewisville/README.md) have every number, the [PDF report](https://github.com/efkopru/nearmap-building-footprints/blob/main/results/lewisville/Lewisville_building_footprint_comparison.pdf) shows both models on the imagery, and the [two-page summary](https://github.com/efkopru/nearmap-building-footprints/blob/main/portfolio/nearmap-building-footprints.pdf) gives the short version.
 
-## Project status
+## What's next
 
-As of October 15, 2026, the reference review ([#2](https://github.com/efkopru/nearmap-building-footprints/issues/2)) and frozen accuracy evaluation ([#3](https://github.com/efkopru/nearmap-building-footprints/issues/3)) are complete. [PR #29](https://github.com/efkopru/nearmap-building-footprints/pull/29) is merged. The reviewed references, existing predictions and published scores remain frozen.
-
-The remaining tracked work is [SAM 3 fine-tuning for small buildings (#4)](https://github.com/efkopru/nearmap-building-footprints/issues/4), deferred until a later session. No real-data training or new training-label packages have been completed. Resume by defining separate training, validation and fresh test areas, then reviewing **every building** in those areas, including small sheds and garages. Keep the completed test area out of training and setting selection. The [fine-tuning guide](docs/USAGE.md#9-fine-tune-sam-3) lists the preparation, hardware pilot and evaluation steps.
+The review and the scoring above are finished. One task is open: [fine-tuning SAM 3 so that it finds small buildings](https://github.com/efkopru/nearmap-building-footprints/issues/4). It has not started. The [usage guide](https://github.com/efkopru/nearmap-building-footprints/blob/main/docs/USAGE.md#9-fine-tune-sam-3) lists what it needs, starting with newly labeled training, validation and test areas.
 
 ## Try it in five minutes
 
@@ -92,7 +96,7 @@ The demo's "predictions" are copies of its reference outlines, so the perfect sc
 - **Fair scoring:** one-to-one matching, so each reference building matches at most one outline, and reports made against different references refuse to be compared.
 - **Traceable results:** hashes link every outline to the pixels, prompts and model weights that made it, and interrupted runs resume safely.
 
-Tested on Windows and Linux with Python 3.12 to 3.14. Reviewed accuracy is available for one test area; fine-tuning and validation across several independent areas remain future work. The [methodology](https://github.com/efkopru/nearmap-building-footprints/blob/main/docs/METHODOLOGY.md) explains the design and what has been tested.
+Tested on Windows and Linux with Python 3.12 to 3.14. The [methodology](https://github.com/efkopru/nearmap-building-footprints/blob/main/docs/METHODOLOGY.md) explains the design and what has been tested.
 
 ## Project layout
 
@@ -103,7 +107,8 @@ Tested on Windows and Linux with Python 3.12 to 3.14. Reviewed accuracy is avail
 | `docs/` | The [usage guide](https://github.com/efkopru/nearmap-building-footprints/blob/main/docs/USAGE.md), the [methodology](https://github.com/efkopru/nearmap-building-footprints/blob/main/docs/METHODOLOGY.md) and the charts |
 | `notebooks/` | [Step-by-step walkthroughs](https://github.com/efkopru/nearmap-building-footprints/blob/main/notebooks/README.md) on the demo data |
 | `results/lewisville/` | The [Lewisville results](https://github.com/efkopru/nearmap-building-footprints/blob/main/results/lewisville/README.md), their CSV files and the PDF report |
-| `configs/`, `scripts/` | Example run settings, setup scripts, the chart maker and the PDF report maker |
+| `portfolio/` | A two-page summary of the project |
+| `configs/`, `scripts/` | Example run settings, setup scripts, and the chart and report builders |
 
 Your imagery and results go in `data/` and `outputs/`, which git ignores.
 

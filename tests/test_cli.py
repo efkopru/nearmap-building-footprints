@@ -1,10 +1,11 @@
+import importlib
 import os
 import subprocess
 import sys
 
 from pyproj.exceptions import CRSError
 
-from nearmap_buildings.cli import is_user_error
+from nearmap_buildings.cli import COMMANDS, is_user_error
 
 def run_nbf(*args, **env):
     # Never inherit a developer's NBF_DEBUG; tests set it explicitly.
@@ -38,6 +39,29 @@ def test_subcommand_help_describes_actual_options():
     assert result.returncode == 0
     assert "--checkpoint" in result.stdout and "--manifest" in result.stdout
 
+def test_top_level_help_says_what_every_command_does():
+    result = run_nbf("--help")
+    assert result.returncode == 0
+    lines = [line.strip() for line in result.stdout.splitlines()]
+    for name, (_, _, summary) in COMMANDS.items():
+        assert summary and any(line.split(None, 1) == [name, summary] for line in lines), name
+        # One line each in an 80-column terminal.
+        assert len(summary) <= 62
+
+def test_every_command_points_at_a_real_function():
+    for name, (module, function, _) in COMMANDS.items():
+        assert callable(getattr(importlib.import_module(f"nearmap_buildings.{module}"), function)), name
+
+def test_missing_command_lists_the_commands_and_fails():
+    result = run_nbf()
+    assert result.returncode == 2
+    assert "commands:" in result.stderr and "evaluate" in result.stderr and result.stdout == ""
+
+def test_unknown_command_is_refused():
+    result = run_nbf("bogus")
+    assert result.returncode == 2
+    assert "invalid choice: 'bogus'" in result.stderr
+
 def test_doctor_works_despite_foreign_projection_environment():
     env = {**os.environ,"PROJ_LIB":"nonexistent/foreign/proj","PROJ_DATA":"nonexistent/foreign/proj"}
     result = subprocess.run([sys.executable,"-m","nearmap_buildings.cli","doctor"],env=env,capture_output=True,text=True)
@@ -54,3 +78,16 @@ def test_setup_script_passes_no_double_quotes_to_python():
     script = (Path(__file__).resolve().parents[1] / "scripts" / "setup_cpu.ps1").read_text(encoding="utf-8")
     snippets = re.findall(r"-c '((?:[^']|'')*)'", script)
     assert snippets and not any('"' in snippet for snippet in snippets)
+
+
+def test_sam3_setup_script_creates_the_folders_it_writes_into():
+    # Git ignores data/ and outputs/, so a fresh clone has neither. Writing into a
+    # missing folder stopped setup_sam3.sh at its last step, after installing everything.
+    import re
+    from pathlib import Path
+
+    script = (Path(__file__).resolve().parents[1] / "scripts" / "setup_sam3.sh").read_text(encoding="utf-8")
+    written = [(match.start(), match.group(1)) for match in re.finditer(r">\s*([\w.-]+(?:/[\w.-]+)*)/[\w.-]+\s*$", script, flags=re.M)]
+    assert written
+    for position, folder in written:
+        assert f"mkdir -p {folder}\n" in script[:position], f"{folder}/ is written to before it is created"

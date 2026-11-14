@@ -4,8 +4,6 @@ Every command in this guide works on local files. Nothing downloads imagery, cal
 
 Start small. Run the demo first, then a few tiles of real imagery, before a whole city. The [methodology](METHODOLOGY.md) explains why each step works the way it does.
 
-**Lewisville status, October 15, 2026.** Reference review [#2](https://github.com/efkopru/nearmap-building-footprints/issues/2) and accuracy evaluation [#3](https://github.com/efkopru/nearmap-building-footprints/issues/3) are complete, and [PR #29](https://github.com/efkopru/nearmap-building-footprints/pull/29) is merged. The existing review and accuracy outputs are frozen. Fine-tuning [#4](https://github.com/efkopru/nearmap-building-footprints/issues/4) is deferred; [section 9](#9-fine-tune-sam-3) describes the remaining preparation. Commands below are workflow examples, not a request to rerun completed evaluations.
-
 1. [Install](#1-install)
 2. [Try the demo](#2-try-the-demo)
 3. [Prepare your imagery](#3-prepare-your-imagery)
@@ -199,11 +197,12 @@ nbf evaluate --predictions outputs/text_pilot01/cleaned.gpkg --predictions-layer
 
 Each predicted outline matches at most one reference building, choosing the most matches above the IoU threshold and then the best overlap. The report gives precision, recall, F1, overlap, area error and boundary distance, and the GeoPackage has matched, unmatched and excluded layers. Buildings crossing the AOI's edge are left out (`--edge-policy clip` clips them instead). A metric with nothing to count is `null`, not 0.
 
-**Area summaries.** `--size-bins-m2 20 50 100` summarizes one global matching by area class (under 20, 20-50, 50-100 and 100 m² and up) and at each minimum-area threshold. Each object uses its own area, so matched predictions and references can fall in different classes. These summaries do not re-run matching on filtered inputs.
+**Building size.** Two options treat small buildings differently, and their numbers are not interchangeable:
 
-**Filter before matching.** For a protocol that scores only buildings of 20 m² and up, add `--min-area-m2 20` to `evaluate`. This removes predictions and reference polygons below that area after AOI handling and before one-to-one matching. The report records the filter and separate area-exclusion counts. Run a second evaluation without this flag for all-size and small-structure results; `--size-bins-m2` alone does not reproduce the filtered protocol. `nbf compare` refuses reports with different area filters.
+- `--size-bins-m2 20 50 100` summarizes one matching by area class (under 20, 20-50, 50-100 and 100 m² and up) and at each minimum area. Each outline uses its own area, so a matched pair can fall in two classes.
+- `--min-area-m2 20` removes predictions and reference buildings under 20 m² after AOI handling and before matching, for a protocol that scores only larger buildings. The report records the filter and what it excluded, and `nbf compare` refuses reports with different filters. Run a second evaluation without it for all-size and small-building results.
 
-**Outdated reference.** If the only reference is an older map, use `--agreement-only` instead of `--independent-holdout`. The scores measure agreement with that map, not current accuracy. Unmatched outlines may reflect inventory omissions, changed structures, different geometry conventions or model errors. The Lewisville [reference provenance](../results/lewisville/reference_provenance.json) records 38,924 source features, primarily dated 2015 or earlier with 33 undated, and 38,882 evaluated city-wide outlines.
+**Outdated reference.** If the only reference is an older map, use `--agreement-only` instead of `--independent-holdout`. The scores then measure agreement with that map, not current accuracy: an unmatched outline may be a building the map lacks, a changed structure, a different outline convention or a model error.
 
 **Compare methods.** Once every method is scored on the same reference and AOI:
 
@@ -219,27 +218,25 @@ nbf compare --reports outputs/text_pilot01/evaluation.json outputs/esri_run01/ev
 nbf agree --predictions outputs/text_pilot01/cleaned.gpkg outputs/esri_run01/cleaned.gpkg --layers cleaned cleaned --labels sam3_text esri --reports outputs/text_pilot01/evaluation.json outputs/esri_run01/evaluation.json --aoi data/reference/test_aoi.gpkg --metric-crs EPSG:32614 --output-json outputs/agreement.json --output-gpkg outputs/agreement.gpkg
 ```
 
-It matches the two methods' outlines one to one and writes `both` and `only_<label>` layers. With evaluation reports (`--reports`, or `-` for a method without one) it also lists `candidate_new`: model-agreement candidates unmatched to the reference. The layer name is retained for compatibility. It does not establish construction dates or prove change: inventory omissions, geometry conventions and shared model errors can produce the same pattern. Keep these candidates out of blind held-out annotation and inspect them separately after the independent review is frozen.
+It matches the two methods' outlines one to one and writes `both` and `only_<label>` layers. With evaluation reports (`--reports`, or `-` for a method without one) it also writes `candidate_new`: pairs both methods drew that no supplied report matched to its reference. Despite the layer's name, these are candidates to review, not proof of new buildings: a gap in the reference, a different outline convention or an error shared by both models looks the same. Keep them out of sight while reviewing a held-out reference.
 
-**Turn an old map into a reviewed reference.** A person must check the entire AOI against the imagery, including missing structures and uncertain areas, while keeping predictions and agreement candidates hidden. Work in GIS on a copy, freeze the reviewed labels and record the coverage and outline convention. Running a command or supplying an attestation does not perform this review. Only after completing it, record the actual reviewer and review date:
+**Turn an old map into a reviewed reference.** A person checks the whole AOI against the imagery, in GIS and on a copy, adding missing buildings and noting uncertain areas, with predictions and agreement candidates hidden. No command or attestation does this review for you. Once it is finished, freeze the reviewed file and record who reviewed it and when:
 
 ```bash
 nbf review-check --original data/lewisville/test_area/reference_2015_subset.gpkg --original-layer buildings --reviewed data/reference/test_area_reviewed.gpkg --aoi data/reference/test_area_aoi.gpkg --metric-crs EPSG:26914 --reviewer "ACTUAL_REVIEWER" --review-date YYYY-MM-DD --imagery-date 2026-05 --label-convention "roof outlines; permanent roofed buildings around 4 m2 and up; open carports excluded" --coverage-complete --independent-review --output-json outputs/accuracy/review_check.json --output-gpkg outputs/accuracy/review_check.gpkg
 ```
 
-Replace the placeholders with the completed review's facts. Use `--coverage-complete` and `--independent-review` only when those statements are true. The check counts `unchanged`, `modified`, `added` and `removed` geometries, flags geometry problems and overlaps, and records provenance. These change categories describe edits to the inventory, not construction or demolition dates.
+Replace the placeholders with the facts of the finished review, and use `--coverage-complete` and `--independent-review` only if they are true. The check flags geometry problems and overlaps, records provenance, and counts `unchanged`, `modified`, `added` and `removed` outlines. Those counts describe edits to the old map, not construction or demolition. Outlines are paired by overlap, not by ID: a pair under 0.95 IoU counts as modified, and a building redrawn below the default 0.5 IoU match threshold appears as one removed and one added outline. Under the default edge policy only outlines fully inside the AOI are counted. Keep any ID-based audit of the edits separate.
 
-The check pairs original and reviewed geometries by overlap, not by their source IDs. A retained building redrawn below the default 0.5 IoU matching threshold can appear as one added and one removed outline. Matched pairs below 0.95 IoU count as modified; smaller edits count as unchanged. Only fully contained outlines enter these counts under the default edge policy. Keep any ID-based edit audit separate and record its scope and thresholds.
-
-For the accuracy workflow, pass the resulting receipt explicitly:
+Then score against the reviewed reference, passing the receipt:
 
 ```bash
 nbf evaluate --predictions outputs/lewisville/city/sam3_building_1536/cleaned.gpkg --predictions-layer cleaned --reference data/reference/test_area_reviewed.gpkg --aoi data/reference/test_area_aoi.gpkg --metric-crs EPSG:26914 --independent-holdout --review-receipt outputs/accuracy/review_check.json --min-area-m2 20 --output-json outputs/accuracy/sam3/evaluation.json
 ```
 
-`--review-receipt` is optional for general evaluation but required by the [accuracy config](../configs/accuracy.example.json). It requires a ready receipt, complete provenance and affirmative coverage/independence attestations, matching reference and AOI fingerprints, `--independent-holdout`, and the default `exclude` edge policy. A stale or unrelated receipt is refused. The config is a template that must be filled from an actual human review; it does not certify one automatically.
+`--review-receipt` is optional in general but required by the [accuracy config](../configs/accuracy.example.json). It is refused unless the receipt is ready and complete, attests full coverage and an independent review, and matches the reference and AOI; the run must also use `--independent-holdout` and the default `exclude` edge policy. The config is a template to fill in from a real review; it does not certify one.
 
-The [Lewisville reviewed test results](../results/lewisville/reviewed_2026/README.md) use this workflow after Esad's October 15, 2026 review. The primary run filters both datasets at 20 m² before matching. A second run without that filter provides all-size metrics and size-class diagnostics. Settings remain those selected using the historical Old Town inventory; the reviewed test results were not used to retune them. Public files contain aggregate scores and sanitized provenance. Imagery, reviewed labels, full receipts and matched geometries stay local. Preserve those completed outputs. For a new experiment, use a new reference version, receipt and output directory instead of reusing the completed paths shown above.
+The [Lewisville reviewed results](../results/lewisville/reviewed_2026/README.md) were made this way: one run with `--min-area-m2 20` and a second without it for all sizes. The paths in the two commands above belong to that completed run, so leave its files as they are and give a new experiment its own reference version, receipt and output folder.
 
 ## 9. Fine-tune SAM 3
 

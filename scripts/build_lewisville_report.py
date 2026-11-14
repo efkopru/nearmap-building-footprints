@@ -2,11 +2,12 @@
 
     python scripts/build_lewisville_report.py
 
-Requires pypdf, Pillow, and Edge or Chrome. The committed PDF supplies its eight
-licensed screenshots; no new imagery or geometry is read. Public CSVs and SVGs
-supply the report. Intermediate HTML and screenshots stay under ignored outputs/.
-The original private report page is not required. A source PDF snapshot is retained
-locally and the destination is replaced only after screenshot identity validation.
+Requires Edge or Chrome and the report packages (python -m pip install -e ".[report]").
+The committed PDF supplies its eight licensed screenshots; no new imagery or geometry
+is read. Public CSVs and SVGs supply the report, which is printed with the browser in
+headless mode. Intermediate HTML and screenshots stay under ignored outputs/. A source
+PDF snapshot is retained locally, and the destination is replaced only after the new
+PDF and its screenshots have been checked.
 """
 
 import argparse
@@ -17,12 +18,20 @@ from html import escape
 import json
 from pathlib import Path
 import shutil
+import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 RESULTS = ROOT / "results/lewisville"
 REPO = "https://github.com/efkopru/nearmap-building-footprints/blob/main/"
 DEFAULT_PDF = RESULTS / "Lewisville_building_footprint_comparison.pdf"
+CREDIT = "Imagery: Nearmap, May 2026"
+BROWSERS = [
+    "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
+    "C:/Program Files/Microsoft/Edge/Application/msedge.exe",
+    "C:/Program Files/Google/Chrome/Application/chrome.exe",
+    "msedge", "microsoft-edge", "google-chrome", "chromium", "chrome",
+]
 
 
 def rows(name):
@@ -67,7 +76,7 @@ def build_html():
     <p class="lead">May 2026 Nearmap imagery, Lewisville, Texas. Independently reviewed test-area accuracy, with historical city-wide inventory agreement.</p>
     <p>Meta's SAM 3 and Esri's Building Footprint Extraction - USA model ran on the same city-wide aerial imagery at 10.16 cm per pixel. The frozen outputs were scored against independently reviewed test-area labels on 15 October 2026. Historical inventory comparisons and eight existing screenshots are retained separately.</p>
     <p><strong>Historical inventory:</strong> 38,924 source inventory features, dated primarily 2015 or earlier, with 33 undated. The city-wide evaluation contains 38,882 outlines. These are separate source and evaluated counts. Collection dates do not establish construction or demolition dates.</p>
-    <p class="meta">29 September 2026 · reviewed test results added 15 October 2026</p>
+    <p class="meta">IMAGERY_CREDIT · 29 September 2026 · reviewed test results added 15 October 2026</p>
     <div class="findings">
     <div class="finding"><b>REVIEWED_F1_MIN20</b><h2>Reviewed accuracy: ≥20 m²</h2><p>Test-area F1 for the city's Esri run, local Esri run and SAM 3, respectively, against 468 reviewed outlines. Both sets were filtered before matching.</p></div>
     <div class="finding"><b>REVIEWED_F1_ALL</b><h2>Reviewed accuracy: all sizes</h2><p>The same three frozen outputs against 600 reviewed outlines, including 132 under 20 m². This is a separate all-size evaluation.</p></div>
@@ -83,7 +92,7 @@ def build_html():
         [['All sizes' if cohort == 'all_sizes' else '≥20 m²', reviewed_lookup[cohort, method]['method'],
           *[reviewed_lookup[cohort, method][key] for key in ['tp', 'fp', 'fn']],
           *[fmt(reviewed_lookup[cohort, method][key]) for key in ['precision', 'recall', 'f1', 'median_iou']]]
-         for cohort in ['all_sizes', 'at_least_20m2'] for method in order], 'compact')
+         for cohort in ['at_least_20m2', 'all_sizes'] for method in order], 'compact')
     pages.append(page('Accuracy against reviewed 2026 test labels',
         '<p>Esad attested complete review of the 700 m test AOI against the May 2026 imagery, using only aerials and historical outlines with no prior or current prediction exposure. Review was confirmed on 15 October 2026, with no exceptions or unresolved cases. The six evaluations use the frozen outputs and a hash-bound review receipt.</p>'
         + chart('reviewed-test-accuracy') + reviewed_table
@@ -107,7 +116,7 @@ def build_html():
         intro = '<p>Red: the city\'s Esri run. Blue: SAM 3, "building", 1536 px, confidence threshold 0.7. Cyan: historical inventory.</p>'
         tail = '<p class="note">Eight existing screenshots: two typical areas and six 300 m squares selected by difference counts. The reviewer reported using only aerials and historical outlines for the test review, with no prior or current prediction exposure. Observations refer to May 2026 imagery, not verified dates of change.</p>'
         if first == 4:
-            tail += '<p class="tip">Select a screenshot to see it larger.</p><p class="note">The imagery is licensed from Nearmap: keep this page private.</p>'
+            tail += f'<p class="note">{CREDIT}.</p>'
         pages.append(page('Screenshots: model agreement and differences' if first == 0 else 'Screenshots: missed structures and tile edges', intro + gallery + tail))
 
     city = rows('citywide_scores.csv')
@@ -195,7 +204,7 @@ def build_html():
     .findings { display:grid; grid-template-columns:1fr 1fr; gap:13px; margin:18px 0; }
     .finding { border:1px solid #d7e1e2; border-radius:8px; padding:15px; }
     .finding > b { font-size:26px; color:#1f5367; } .finding h2 { margin:3px 0 8px; } .finding p { margin:0; font-size:14px; }
-    .gallery { display:grid; grid-template-columns:1fr 1fr; gap:18px; max-width:none; }
+    .gallery { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:18px; }
     figure { margin:0; } figure img { width:100%; height:350px; display:block; object-fit:contain; }
     figcaption { font-size:12px; line-height:1.35; margin-top:7px; }
     table { width:100%; border-collapse:collapse; margin:15px 0; font-variant-numeric:tabular-nums; font-size:13px; }
@@ -208,11 +217,41 @@ def build_html():
     .barrow > div { display:flex; align-items:center; gap:7px; height:17px; } .barrow i { height:17px; display:inline-block; border-radius:0 3px 3px 0; } .barrow b { font-size:12px; }
     .heat td { padding:16px 6px; font-weight:600; } .heat td:first-child { font-weight:400; } .heat th { padding:10px 6px; }
     dl { display:grid; grid-template-columns:140px 1fr; gap:12px 18px; margin:15px 0; font-size:13px; } dt { color:#52686e; } dd { margin:0; }
-    li { margin:9px 0; } .tip { font-size:12px; }
-    @media print { .report-page { break-inside:avoid; } .gallery { max-width:none !important; } }
+    li { margin:9px 0; }
+    @media print {
+      @page { size: Letter; margin: 0.5in 0.5in 0.6in;
+        @bottom-center { content: "Lewisville building footprints · SAM 3 and Esri · page " counter(page) " of " counter(pages);
+          font: 9pt "Public Sans", "Segoe UI", sans-serif; color: #6f7a7c; } }
+      html { zoom: 0.78; }
+      .page { max-width: none; }
+      section, .finding, figure, tr { break-inside: avoid; }
+      h2, h3 { break-after: avoid; }
+    }
     '''
     html = '<!doctype html><html><head><meta charset="utf-8"><title>Lewisville building footprint comparison</title><style>' + css + '</style></head><body><main class="page">' + ''.join(pages) + '</main></body></html>'
-    return html.replace('REVIEWED_F1_MIN20', reviewed_f1['at_least_20m2']).replace('REVIEWED_F1_ALL', reviewed_f1['all_sizes'])
+    return (html.replace('REVIEWED_F1_MIN20', reviewed_f1['at_least_20m2']).replace('REVIEWED_F1_ALL', reviewed_f1['all_sizes'])
+            .replace('IMAGERY_CREDIT', CREDIT))
+
+
+def find_browser(explicit=None):
+    for candidate in [explicit] if explicit else BROWSERS:
+        found = shutil.which(candidate) or (candidate if Path(candidate).is_file() else None)
+        if found:
+            return found
+    raise FileNotFoundError("Edge or Chrome not found; pass its path with --browser.")
+
+
+def print_pdf(page, destination, browser):
+    """Print an HTML file to a new PDF with headless Edge or Chrome.
+
+    The browser can exit normally without writing anything, so the result must start like a PDF.
+    """
+    with tempfile.TemporaryDirectory() as profile:
+        subprocess.run([browser, "--headless", "--disable-gpu", "--no-first-run", f"--user-data-dir={profile}",
+                        "--no-pdf-header-footer", f"--print-to-pdf={destination}", Path(page).resolve().as_uri()],
+                       check=True, capture_output=True)
+    if not destination.is_file() or destination.read_bytes()[:5] != b"%PDF-":
+        raise RuntimeError(f"{browser} did not write a PDF")
 
 
 def screenshot_images(reader):
@@ -267,7 +306,6 @@ def main(argv=None):
     parser.add_argument("--html-only", action="store_true", help="Prepare local source without rendering")
     args = parser.parse_args(argv)
     from pypdf import PdfReader
-    import make_report_pdf
 
     source = args.source_pdf.resolve()
     work = args.work_dir.resolve()
@@ -290,10 +328,7 @@ def main(argv=None):
     # A failed render or screenshot check cannot replace the existing report.
     with tempfile.TemporaryDirectory(dir=output.parent) as directory:
         rendered, checked = Path(directory) / "rendered.pdf", Path(directory) / "checked.pdf"
-        command = [str(html), str(rendered)]
-        if args.browser:
-            command += ["--browser", args.browser]
-        make_report_pdf.main(command)
+        print_pdf(html, rendered, find_browser(args.browser))
         pages = preserve_screenshots(baseline, rendered, checked)
         checked.replace(output)
     record = {"baseline_sha256": source_hash, "output_sha256": hashlib.sha256(output.read_bytes()).hexdigest(),

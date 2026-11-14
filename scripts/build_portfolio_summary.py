@@ -1,7 +1,7 @@
 """Build the two-page public portfolio PDF from committed aggregate CSVs.
 
 Run from any directory: python scripts/build_portfolio_summary.py
-Optional reporting dependencies: reportlab and pypdf. No private data is read.
+Needs the report packages: python -m pip install -e ".[report]". No private data is read.
 """
 
 import argparse

@@ -35,7 +35,7 @@ Review held-out labels against the imagery without viewing predictions, agreemen
 
 For Lewisville, Esad confirmed completion of both reviews on October 15, 2026 (America/Chicago), following the documented rules with no unresolved cases. The reviewer attested that the test-area review used only the aerial imagery and historical outlines, with no exposure to SAM 3 or Esri predictions before or during that review. The reviewed reference inherits the historical inventory's geometry and building identities; it is not a second independently drawn annotation set. The [reviewed results](../results/lewisville/reviewed_2026/README.md) apply to one 700 m test square. Settings were selected against the historical Old Town inventory and remained frozen for this evaluation.
 
-That review and evaluation are complete ([#2](https://github.com/efkopru/nearmap-building-footprints/issues/2), [#3](https://github.com/efkopru/nearmap-building-footprints/issues/3)). The published test results now inform the proposed small-building fine-tuning experiment, so its final evaluation needs fresh geographic test areas. Preserve the completed test labels and outputs; do not use them for training, checkpoint selection or settings. Draw new training, validation and test regions before preparing the fine-tuning data, and review the fresh test areas without exposure to model predictions. Review every building in each region, including larger houses: small-structure-only labels would incorrectly treat the omitted buildings as background.
+Those test results are now published, so they can no longer serve as an unseen test for later work. The planned fine-tuning experiment therefore needs fresh test areas, and the completed test labels must stay out of training and setting selection. The [fine-tuning guide](USAGE.md#9-fine-tune-sam-3) describes the new areas and labels it needs.
 
 ## 3. Record the human input for each method
 
@@ -97,11 +97,11 @@ With an older inventory, FP and FN describe disagreement with that inventory. Tw
 
 ## What has been tested
 
-Last updated October 2026. Software checks and measured results are listed separately from work not yet run.
+Last updated November 2026. Software checks and measured results are listed separately from work not yet run.
 
 **Run and passing**
 
-- The test suite, lint and a synthetic run of every CPU command, on Windows and Linux with Python 3.12, 3.13 and 3.14, on every push ([CI history](https://github.com/efkopru/nearmap-building-footprints/actions/workflows/cpu-tests.yml)). Package branch coverage was 81% when last measured. Deprecation warnings from this package fail the tests.
+- The test suite, lint and a synthetic run of every CPU command, on Windows and Linux with Python 3.12, 3.13 and 3.14, on every push ([CI history](https://github.com/efkopru/nearmap-building-footprints/actions/workflows/cpu-tests.yml)). Package branch coverage was 86% when last measured. Deprecation warnings from this package fail the tests.
 - Geometry and raster handling: transforms, CRS, nodata, courtyard holes, touching buildings, IDs above 255, duplicate removal, regularization limits, one-to-one matching, AOI edge rules, empty inputs and split leakage.
 - All four SAM 3 modes against a fake model, which checks prompts, georeferencing and outputs but not the network itself.
 - Checkpoint export and loading with real PyTorch 2.10 on CPU, using a small stand-in model in SAM 3's layout: its weights survive export and load strictly into a fresh model.
@@ -113,7 +113,7 @@ Last updated October 2026. Software checks and measured results are listed separ
 **Not run yet**
 
 - Accuracy evaluation across several independent geographic areas or an independently redrawn reference. City-wide results still measure agreement with an inventory dated primarily 2015 or earlier, with 33 undated source features; the [historical reference provenance](../results/lewisville/reference_provenance.json) distinguishes the 38,924 source features from the 38,882 evaluated city-wide outlines.
-- Fine-tuning on real data, and loading a really fine-tuned checkpoint. This is the remaining tracked work in [issue #4](https://github.com/efkopru/nearmap-building-footprints/issues/4), deferred as of October 15, 2026. New training, validation and fresh test labeling packages are not prepared; the training config and paths remain examples. Begin with a batch-size-1 hardware pilot before a full run, because the 6 GB inference GPU has not been validated for training. The [fine-tuning guide](USAGE.md#9-fine-tune-sam-3) records the resumption steps.
+- Fine-tuning on real data, and loading a really fine-tuned checkpoint ([issue #4](https://github.com/efkopru/nearmap-building-footprints/issues/4), not started). The [fine-tuning guide](USAGE.md#9-fine-tune-sam-3) lists what it needs, beginning with a small hardware pilot: the 6 GB GPU used for inference has not been shown to fit training.
 - Seam merging, `nbf agree` and the chunked Esri commands on the Lewisville imagery; they are covered by synthetic tests.
 - Any licensed Nearmap AI layer.
 

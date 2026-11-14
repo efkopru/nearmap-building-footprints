@@ -1,4 +1,4 @@
-# Tested on Windows, Python 3.12.1. This lock covers CPU preparation/testing only.
+# CPU preparation and testing only. CI installs this lock on Windows and Ubuntu with Python 3.12, 3.13 and 3.14.
 affine==3.0.1
 attrs==26.1.0
 certifi==2026.7.22
