@@ -83,7 +83,7 @@ def build_html():
         [['All sizes' if cohort == 'all_sizes' else '≥20 m²', reviewed_lookup[cohort, method]['method'],
           *[reviewed_lookup[cohort, method][key] for key in ['tp', 'fp', 'fn']],
           *[fmt(reviewed_lookup[cohort, method][key]) for key in ['precision', 'recall', 'f1', 'median_iou']]]
-         for cohort in ['all_sizes', 'at_least_20m2'] for method in order], 'compact')
+         for cohort in ['at_least_20m2', 'all_sizes'] for method in order], 'compact')
     pages.append(page('Accuracy against reviewed 2026 test labels',
         '<p>Esad attested complete review of the 700 m test AOI against the May 2026 imagery, using only aerials and historical outlines with no prior or current prediction exposure. Review was confirmed on 15 October 2026, with no exceptions or unresolved cases. The six evaluations use the frozen outputs and a hash-bound review receipt.</p>'
         + chart('reviewed-test-accuracy') + reviewed_table

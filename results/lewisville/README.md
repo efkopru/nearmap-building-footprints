@@ -26,7 +26,7 @@ Settings were selected against the historical Old Town inventory under the [froz
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/efkopru/nearmap-building-footprints/main/docs/images/reviewed-test-accuracy-dark.svg">
-  <img alt="Reviewed test-area accuracy for three frozen methods, with separate all-size and at-least-20-square-metre panels. Primary F1: city Esri 0.958, SAM 3 0.873 and local Esri 0.920." src="https://raw.githubusercontent.com/efkopru/nearmap-building-footprints/main/docs/images/reviewed-test-accuracy.svg">
+  <img alt="Bar chart of precision, recall and F1 on the reviewed test area. Buildings of 20 m² and up: Esri city run 0.97, 0.95 and 0.96; Esri local raw run 0.94, 0.90 and 0.92; SAM 3 0.83, 0.92 and 0.87. Counting every size, F1 is 0.84, 0.81 and 0.77." src="https://raw.githubusercontent.com/efkopru/nearmap-building-footprints/main/docs/images/reviewed-test-accuracy.svg">
 </picture>
 
 **Separate all-size evaluation.** The full 600-building reference is matched without a new minimum-area filter. The review convention was approximately 4 m²; its three retained outlines just below 4 m² are included as reviewed. These results are not inferred from the primary run:

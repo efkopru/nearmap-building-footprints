@@ -17,15 +17,17 @@ ROOT = Path(__file__).resolve().parents[1]
 RESULTS = ROOT / "results" / "lewisville"
 FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif"
 
-# Esri's Mask R-CNN is red, SAM 3 blue and "found by both" violet in every chart. The pairs pass the
-# dataviz palette checks (colour-blind separation and contrast) on both surfaces.
+# Esri's Mask R-CNN is red, SAM 3 blue and "found by both" violet in every chart. The local raw
+# run is the same Esri model, so it takes a second step of the Esri red, not a colour of its own.
+# Colours drawn side by side pass the dataviz palette checks (colour-blind separation, normal-vision
+# separation and contrast) on both surfaces.
 THEMES = {
     "light": dict(surface="#fcfcfb", border="#e1e0d9", card="#f3f2ee", ink="#0b0b0b", ink2="#52514e",
-                  muted="#898781", grid="#e1e0d9", esri="#e34948", sam3="#2a78d6", both="#4a3aa7",
-                  missed="#d6d5ce", on_color="#ffffff"),
+                  muted="#898781", grid="#e1e0d9", esri="#e34948", esri_local="#ee9591", sam3="#2a78d6",
+                  both="#4a3aa7", missed="#d6d5ce", on_color="#ffffff"),
     "dark": dict(surface="#1a1a19", border="#2c2c2a", card="#242422", ink="#ffffff", ink2="#c3c2b7",
-                 muted="#898781", grid="#383835", esri="#e66767", sam3="#3987e5", both="#9085e9",
-                 missed="#46463f", on_color="#0b0b0b"),
+                 muted="#898781", grid="#383835", esri="#e66767", esri_local="#a34a4a", sam3="#3987e5",
+                 both="#9085e9", missed="#46463f", on_color="#0b0b0b"),
 }
 
 # Area classes of the historical inventory, as named in citywide_by_size.csv.
@@ -49,6 +51,14 @@ class Svg:
             return
         self.parts.append(f'<path d="M{x:g} {y:g}h{w - r:g}a{r} {r} 0 0 1 {r} {r}v{h - 2 * r:g}'
                           f'a{r} {r} 0 0 1 -{r} {r}h-{w - r:g}z" fill="{fill}"/>')
+
+    def column(self, x, y, w, h, fill, r=4):
+        """A vertical bar with a rounded top, anchored square at the baseline."""
+        if h <= r:
+            self.rect(x, y, w, max(h, 0), fill)
+            return
+        self.parts.append(f'<path d="M{x:g} {y + h:g}v-{h - r:g}a{r} {r} 0 0 1 {r} -{r}h{w - 2 * r:g}'
+                          f'a{r} {r} 0 0 1 {r} {r}v{h - r:g}z" fill="{fill}"/>')
 
     def line(self, x1, y1, x2, y2, stroke, width=1):
         self.parts.append(f'<line x1="{x1:g}" y1="{y1:g}" x2="{x2:g}" y2="{y2:g}" stroke="{stroke}" stroke-width="{width}"/>')
@@ -180,13 +190,15 @@ def reviewed_test_accuracy(t):
     with (RESULTS / "reviewed_2026/test_area_scores.csv").open(encoding="utf-8", newline="") as stream:
         scores = {(r["cohort"], r["method_key"]): r for r in csv.DictReader(stream)}
     methods = [("esri_city", "Esri, city run", t["esri"]),
-               ("esri_local", "Esri, local run", t["both"]), ("sam3", "SAM 3", t["sam3"])]
+               ("esri_local", "Esri, local raw run", t["esri_local"]), ("sam3", "SAM 3", t["sam3"])]
     svg = Svg(840, 442, t)
     svg.header("Accuracy against independently reviewed 2026 labels",
                "Frozen settings in the held-out 700 m test square; IoU ≥0.5; review 15 October 2026")
     svg.legend(102, [(label, color) for _, label, color in methods])
-    bottom, full = 350, 185
-    for panel, (cohort, label) in enumerate([("all_sizes", "All sizes"), ("at_least_20m2", "At least 20 m²")]):
+    bottom, full, width, gap = 350, 185, 24, 3
+    cluster = len(methods) * width + (len(methods) - 1) * gap
+    # The primary cohort comes first.
+    for panel, (cohort, label) in enumerate([("at_least_20m2", "At least 20 m²"), ("all_sizes", "All sizes")]):
         x0 = 58 + 398 * panel
         n = int(scores[cohort, "sam3"]["reference"])
         svg.text(x0, 141, f"{label}: {n:,} reviewed outlines", 15, weight=600)
@@ -195,16 +207,17 @@ def reviewed_test_accuracy(t):
             svg.line(x0, y, x0 + 320, y, t["grid"] if value else t["muted"])
             svg.text(x0 - 8, y + 4, f"{value:.1f}", 11, t["muted"], anchor="end")
         for group, metric in enumerate(["precision", "recall", "f1"]):
-            center = x0 + 49 + group * 111
+            left = x0 + 16 + group * 107
             for index, (key, _, color) in enumerate(methods):
                 value = float(scores[cohort, key][metric])
-                x = center - 35 + index * 25
+                x = left + index * (width + gap)
                 y = bottom - value * full
-                svg.rect(x, y, 20, value * full, color, rx=2)
-                svg.text(x + 10, y - 7, f"{value:.2f}", 10, weight=600, anchor="middle")
-            svg.text(center, bottom + 23, "F1" if metric == "f1" else metric.capitalize(), 13, anchor="middle")
-    svg.text(32, 405, "Esad attested complete test-AOI review with no prior or current prediction exposure.", 12, t["muted"])
-    svg.text(32, 423, "Area filter: both sets before matching. This test-area result is not a city-wide accuracy estimate.",
+                svg.column(x, y, width, value * full, color)
+                svg.text(x + width / 2, y - 7, f"{value:.2f}", 11, weight=600, anchor="middle")
+            svg.text(left + cluster / 2, bottom + 23, "F1" if metric == "f1" else metric.capitalize(), 13, anchor="middle")
+    svg.text(32, 405, "Reference reviewed by hand against the May 2026 imagery, without seeing model output (reviewer's attestation).",
+             12, t["muted"])
+    svg.text(32, 423, "Left: both sets are filtered to 20 m² and up before matching. One test square, not a city-wide estimate.",
              12, t["muted"])
     return svg
 
