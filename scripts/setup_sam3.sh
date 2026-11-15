@@ -15,6 +15,15 @@ if ! python3.12 -c 'import ensurepip' 2>/dev/null; then
   printf '%s\n' 'Python 3.12 venv support is missing. Install it first: sudo apt install python3.12-venv' >&2
   exit 1
 fi
+# Meta's training loss compiles a small GPU helper the first time it runs, which needs a
+# C compiler and Python's headers. Checked here because it otherwise fails at the first step.
+if [[ "$training" == "--training" ]]; then
+  python_include="$(python3.12 -c 'import sysconfig; print(sysconfig.get_paths()["include"])')"
+  if ! printf '#include <Python.h>\n' | cc -E -x c -I"$python_include" - >/dev/null 2>&1; then
+    printf '%s\n' 'Training needs a C compiler and the Python headers. Install them first: sudo apt install build-essential python3.12-dev' >&2
+    exit 1
+  fi
+fi
 python3.12 -m venv .venv-sam3
 source .venv-sam3/bin/activate
 python -m pip install pip==26.2.1
@@ -24,7 +33,8 @@ mkdir -p third_party
 if [[ ! -d third_party/sam3 ]]; then
   git clone https://github.com/facebookresearch/sam3.git third_party/sam3
 fi
-if [[ -n "$(git -C third_party/sam3 status --porcelain)" ]]; then
+# Added files, such as a training config copied into the checkout, are fine; edits to Meta's code are not.
+if [[ -n "$(git -C third_party/sam3 status --porcelain --untracked-files=no)" ]]; then
   printf '%s\n' 'SAM 3 checkout has local changes. Preserve them and use a separate checkout.' >&2
   exit 1
 fi
