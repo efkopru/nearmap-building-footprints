@@ -70,6 +70,14 @@ nbf tile path/to/aoi_rgb.tif --output data/prepared/pilot01 --tile-size 1024 --o
 
 Tile size and overlap are starting points, not best values. Big roofs need bigger tiles or more overlap, and more overlap means more disk space. `--overlap` is a minimum: every tile is full size, so the last row and column sit flush with the raster's edge and overlap their neighbours by more.
 
+**Separate areas.** To tile several areas of one image into a single manifest, pass a polygon layer:
+
+```bash
+nbf tile path/to/city.vrt --output data/prepared/areas01 --areas data/labels/splits.gpkg --area-id-field area_id --tile-size 1024 --overlap 512
+```
+
+Each area is tiled on its own, starting at its top-left corner, and its tile ids begin with the area's id. `--area-margin-px` adds a border around each area, so that a building on its edge is seen whole.
+
 ## 4. Run SAM 3
 
 ### GPU environment
