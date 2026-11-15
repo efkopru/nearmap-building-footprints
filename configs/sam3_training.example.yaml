@@ -89,6 +89,9 @@ trainer:
     skip_saving_parameters:
       - backbone.vision_backbone.trunk.*
       - backbone.language_backbone.*
+    # Besides the latest checkpoint.pt, keep checkpoint_5.pt, checkpoint_10.pt and so on,
+    # so that validation can choose among them (about 0.5 GB each).
+    save_freq: 5
   data:
     train:
       dataset:

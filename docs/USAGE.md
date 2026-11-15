@@ -282,7 +282,7 @@ Two checks are strict by default, and real data usually needs their tolerances. 
 
 **Set up training.** `bash scripts/setup_sam3.sh --training` adds Meta's training packages to the GPU environment. Meta's loss compiles a small GPU helper the first time it runs, so the environment also needs a C compiler and Python's headers (`sudo apt install build-essential python3.12-dev`); the script checks for them first.
 
-**Run a pilot, then train.** [`configs/sam3_training.example.yaml`](../configs/sam3_training.example.yaml) targets Meta's SAM 3 commit `2345a4ad109ac29c569da749c91d84f10dc08c40` and follows Meta's Roboflow recipe with building masks, one image per step and 20 epochs, validating on `val` and leaving `test` untouched. First run a copy with `max_epochs: 1` to check a training step, validation and checkpoint saving on your hardware. In the Linux training environment:
+**Run a pilot, then train.** [`configs/sam3_training.example.yaml`](../configs/sam3_training.example.yaml) targets Meta's SAM 3 commit `2345a4ad109ac29c569da749c91d84f10dc08c40` and follows Meta's Roboflow recipe with building masks, one image per step and 20 epochs, validating on `val` and leaving `test` untouched. Besides the latest `checkpoint.pt` it keeps one every five epochs (`checkpoint_5.pt` and so on), so that validation can choose among them. First run a copy with `max_epochs: 1` to check a training step, validation and checkpoint saving on your hardware. In the Linux training environment:
 
 ```bash
 cp configs/sam3_training.example.yaml /path/to/sam3/sam3/train/configs/buildings.yaml
