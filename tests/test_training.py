@@ -13,6 +13,7 @@ import rasterio
 from rasterio.transform import from_origin
 from shapely.geometry import Polygon, box
 
+from nearmap_buildings import training
 from nearmap_buildings.esri import run_esri
 from nearmap_buildings.import_vectors import import_vectors, main as import_vectors_main
 from nearmap_buildings.training import (SAM3_COMMIT, detector_state_from_trainer, encode_rle,
@@ -190,6 +191,72 @@ def test_nodata_imagery_is_not_used_as_exhaustive_supervision(tmp_path):
     assert not (tmp_path / "out").exists()
 
 
+def test_sliver_overlaps_pass_only_with_an_explicit_tolerance(tmp_path):
+    """Attached buildings drawn separately often share a sliver; stacked outlines must still fail."""
+    inputs = make_data(tmp_path / "source")
+    gpd.GeoDataFrame(geometry=[box(1, 1, 5, 5), box(4, 4, 6, 6)], crs="EPSG:26914").to_file(inputs[1])
+    with pytest.raises(ValueError, match=r"buildings 1 and 2, 1 pixels"):
+        prepare(inputs, tmp_path / "strict")
+    report = prepare(inputs, tmp_path / "out", max_overlap_pixels=1)
+    assert report["max_overlap_pixels"] == 1
+    assert report["overlaps_resolved"] == [{"tile_id": "train", "kept_by": 1, "removed_from": 2, "pixels": 1}]
+    first, second = json.loads((tmp_path / "out/train/annotations.json").read_text())["annotations"]
+    assert (first["area"], second["area"], second["bbox"]) == (16, 3, [4, 4, 2, 2])
+    # The earlier outline keeps the shared pixel, so the two masks stay disjoint.
+    assert not (decode_rle(first["segmentation"]) & decode_rle(second["segmentation"])).any()
+    with rasterio.open(tmp_path / "out/train/instances/tile_000001.tif") as src:
+        values = src.read(1)
+        assert (values == 1).sum() == 16 and (values == 2).sum() == 3
+
+    gpd.GeoDataFrame(geometry=[box(1, 1, 5, 5), box(3, 3, 6, 6)], crs="EPSG:26914").to_file(inputs[1])
+    with pytest.raises(ValueError, match=r"buildings 1 and 2, 4 pixels"):
+        prepare(inputs, tmp_path / "stacked", max_overlap_pixels=1)
+    for bad in (-1, 1.5, True):
+        with pytest.raises(ValueError, match="max_overlap_pixels"):
+            prepare(inputs, tmp_path / "bad", max_overlap_pixels=bad)
+    assert not (tmp_path / "stacked").exists() and not (tmp_path / "bad").exists()
+
+
+def flag_missing(path, pixels):
+    with rasterio.open(path, "r+") as src:
+        valid = np.full((src.height, src.width), 255, dtype=np.uint8)
+        valid.ravel()[:pixels] = 0
+        src.write_mask(valid)
+
+
+def test_a_few_black_pixels_pass_only_with_an_explicit_tolerance(tmp_path):
+    """Where the nodata value is 0, a truly black shadow pixel is flagged as missing."""
+    inputs = make_data(tmp_path / "source")
+    flag_missing(inputs[0].parent / "train.tif", 1)
+    with pytest.raises(ValueError, match=r"nodata pixels present \(1 of 100\)"):
+        prepare(inputs, tmp_path / "strict")
+    with pytest.raises(ValueError, match="nodata pixels present"):
+        prepare(inputs, tmp_path / "too-strict", min_valid_fraction=0.995)
+    report = prepare(inputs, tmp_path / "out", min_valid_fraction=0.99)
+    assert report["min_valid_fraction"] == 0.99
+    assert report["tiles_with_missing_pixels"] == [{"tile_id": "train", "missing_pixels": 1}]
+    assert report["counts"]["train"]["images"] == 1
+    for bad in (0, 1.5, -1):
+        with pytest.raises(ValueError, match="min_valid_fraction"):
+            prepare(inputs, tmp_path / "bad", min_valid_fraction=bad)
+
+
+def test_missing_pixels_in_a_skipped_tile_do_not_stop_the_run(tmp_path):
+    inputs = make_data(tmp_path / "source")
+    folder = inputs[0].parent
+    with rasterio.open(folder / "outside.tif", "w", driver="GTiff", width=10, height=10, count=3, dtype="uint8",
+                       crs="EPSG:26914", transform=from_origin(200, 10, 1, 1)) as dst:
+        dst.write(np.zeros((3, 10, 10), dtype=np.uint8))
+    flag_missing(folder / "outside.tif", 100)
+    manifest = json.loads(inputs[0].read_text())
+    manifest["tiles"].append({"id": "outside", "path": "outside.tif", "row_off": 0, "col_off": 200, "width": 10,
+                              "height": 10, "crs": "EPSG:26914", "bounds": [200, 0, 210, 10]})
+    inputs[0].write_text(json.dumps(manifest))
+    report = prepare(inputs, tmp_path / "out", skip_unassigned=True)
+    assert [tile["tile_id"] for tile in report["skipped_tiles"]] == ["outside"]
+    assert report["tiles_with_missing_pixels"] == []
+
+
 def test_launcher_uses_real_entry_and_dry_run_never_spawns(tmp_path, monkeypatch):
     root = tmp_path / "sam3"
     directory = root / "sam3/train/configs"
@@ -198,6 +265,7 @@ def test_launcher_uses_real_entry_and_dry_run_never_spawns(tmp_path, monkeypatch
     config = directory / "buildings.yaml"
     config.write_text("trainer: {}")
     monkeypatch.setattr(subprocess, "run", lambda *a, **k: pytest.fail("unexpected process"))
+    monkeypatch.setattr(subprocess, "Popen", lambda *a, **k: pytest.fail("unexpected process"))
     result = launch_sam3(root, config, python="gpu-python")
     assert result["command"][2:4] == ["-c", "configs/buildings.yaml"]
     assert result["execute"] is False
@@ -205,6 +273,73 @@ def test_launcher_uses_real_entry_and_dry_run_never_spawns(tmp_path, monkeypatch
     external.write_text("trainer: {}")
     with pytest.raises(ValueError, match="inside checkout"):
         launch_sam3(root, external)
+    with pytest.raises(ValueError, match="needs --execute"):
+        launch_sam3(root, config, record=tmp_path / "run.json")
+
+
+def fake_checkout(tmp_path, script):
+    root = tmp_path / "sam3"
+    directory = root / "sam3/train/configs"
+    directory.mkdir(parents=True)
+    (directory.parent / "train.py").write_text(script)
+    config = directory / "buildings.yaml"
+    config.write_text("trainer: {}")
+    return root, config
+
+
+def test_a_failed_training_run_is_reported_plainly_and_still_recorded(tmp_path, monkeypatch):
+    """A pilot that runs out of memory is a result to keep, not a traceback to scroll past."""
+    root, config = fake_checkout(tmp_path, "import sys, time\ntime.sleep(1.5)\nsys.exit(3)\n")
+    readings = iter([2000, 5863, 4100])
+    monkeypatch.setattr(training, "gpu_status", lambda: {"name": "Test GPU", "memory_total_mib": 6141,
+                                                         "memory_used_mib": next(readings, 3000)})
+    record = tmp_path / "records" / "run.json"
+    with pytest.raises(RuntimeError, match="exit code 3"):
+        launch_sam3(root, config, python=sys.executable, execute=True, record=record)
+    saved = json.loads(record.read_text())
+    assert saved["exit_code"] == 3 and saved["wall_seconds"] >= 1
+    assert saved["gpu"] == "Test GPU" and saved["gpu_memory_total_mib"] == 6141
+    assert saved["peak_gpu_memory_used_mib"] == 5863
+    assert saved["config_sha256"] == training.sha256_file(config)
+    assert saved["command"][1].endswith("train.py")
+    # A record is never replaced, and that is checked before anything starts.
+    monkeypatch.setattr(subprocess, "Popen", lambda *a, **k: pytest.fail("unexpected process"))
+    with pytest.raises(FileExistsError, match="Run record exists"):
+        launch_sam3(root, config, python=sys.executable, execute=True, record=record)
+
+
+def test_a_finished_training_run_works_without_a_gpu_reading(tmp_path, monkeypatch):
+    root, config = fake_checkout(tmp_path, "import os\nassert os.environ['PYTHONPATH'].startswith(os.getcwd())\n"
+                                           "assert os.environ['PYTORCH_CUDA_ALLOC_CONF'] == os.environ['EXPECTED']\n")
+    monkeypatch.setattr(training, "gpu_status", lambda: None)
+    # The memory setting is a default only: a value the user set is left alone.
+    monkeypatch.setenv("PYTORCH_CUDA_ALLOC_CONF", "max_split_size_mb:64")
+    monkeypatch.setenv("EXPECTED", "max_split_size_mb:64")
+    launch_sam3(root, config, python=sys.executable, execute=True)
+    monkeypatch.delenv("PYTORCH_CUDA_ALLOC_CONF")
+    monkeypatch.setenv("EXPECTED", "garbage_collection_threshold:0.8")
+    record = tmp_path / "run.json"
+    plan = launch_sam3(root, config, python=sys.executable, execute=True, record=record)
+    assert plan["execute"] is True
+    saved = json.loads(record.read_text())
+    assert saved["exit_code"] == 0 and saved["peak_gpu_memory_used_mib"] is None and saved["gpu"] is None
+    # Without a record nothing is measured or written.
+    monkeypatch.setattr(training, "gpu_status", lambda: pytest.fail("no measurement was asked for"))
+    assert launch_sam3(root, config, python=sys.executable, execute=True)["execute"] is True
+
+
+def test_gpu_status_reads_the_busiest_card_and_tolerates_a_missing_tool(monkeypatch):
+    listing = "NVIDIA A, 6141, 120\nNVIDIA B, 24576, 5863\n"
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: SimpleNamespace(stdout=listing))
+    assert training.gpu_status() == {"name": "NVIDIA B", "memory_total_mib": 24576, "memory_used_mib": 5863}
+
+    def missing(*args, **kwargs):
+        raise FileNotFoundError("nvidia-smi")
+
+    monkeypatch.setattr(subprocess, "run", missing)
+    assert training.gpu_status() is None
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: SimpleNamespace(stdout="not a table\n"))
+    assert training.gpu_status() is None
 
 
 def test_vector_import_reprojects_and_preserves_instances(tmp_path):
@@ -332,11 +467,41 @@ def test_checkpoint_export_rejects_partial_or_nontensor_state():
         detector_state_from_trainer({"model": state}, is_tensor=lambda value: isinstance(value, np.ndarray))
 
 
+def test_released_backbones_replace_whatever_the_trainer_state_holds():
+    def is_array(value):
+        return isinstance(value, np.ndarray)
+
+    trained = native_state(lambda: np.array([2.0]))
+    released = {"model": {**{f"detector.{key}": np.array([1.0]) for key in native_state()},
+                          "detector.backbone.vision_backbone.trunk.extra": np.array([1.0]),
+                          "tracker.memory.weight": np.array([1.0])}}
+    merged = detector_state_from_trainer({"model": trained}, is_tensor=is_array, released=released)
+    assert merged["detector.backbone.vision_backbone.trunk.weight"][0] == 1.0
+    assert merged["detector.backbone.language_backbone.encoder.weight"][0] == 1.0
+    assert merged["detector.transformer.encoder.weight"][0] == 2.0
+    assert "detector.backbone.vision_backbone.trunk.extra" in merged and not any("tracker" in key for key in merged)
+
+    # A recipe that leaves the frozen backbones out of its checkpoints.
+    slim = {key: value for key, value in trained.items() if not key.startswith("backbone.")}
+    slim["backbone.vision_backbone.convs.weight"] = np.array([2.0])
+    with pytest.raises(ValueError, match="needs --base-checkpoint"):
+        detector_state_from_trainer({"model": slim}, is_tensor=is_array)
+    merged = detector_state_from_trainer({"model": slim}, is_tensor=is_array, released=released)
+    assert merged["detector.backbone.vision_backbone.convs.weight"][0] == 2.0
+    assert merged["detector.backbone.vision_backbone.trunk.weight"][0] == 1.0
+    with pytest.raises(ValueError, match="holds no weights for backbone.language_backbone"):
+        detector_state_from_trainer({"model": slim}, is_tensor=is_array, released={
+            "detector.backbone.vision_backbone.trunk.weight": np.array([1.0])})
+    with pytest.raises(ValueError, match="mapping of detector weights"):
+        detector_state_from_trainer({"model": slim}, is_tensor=is_array, released=[1, 2])
+
+
 def test_export_file_wrapper_uses_safe_load_and_hash_bound_metadata(tmp_path, monkeypatch):
     class TensorStandIn:
         device = SimpleNamespace(type="cpu")
         layout = "strided"
         is_quantized = False
+        dtype = "float32"
 
         def is_floating_point(self):
             return True
@@ -354,7 +519,7 @@ def test_export_file_wrapper_uses_safe_load_and_hash_bound_metadata(tmp_path, mo
         calls["saved"] = payload
         handle.write(b"mock serialized inference checkpoint")
 
-    fake_torch = SimpleNamespace(load=safe_load, save=save, strided="strided",
+    fake_torch = SimpleNamespace(load=safe_load, save=save, strided="strided", float32="float32",
                                  is_tensor=lambda value: isinstance(value, TensorStandIn),
                                  isfinite=lambda value: np.array([True]))
     monkeypatch.setitem(sys.modules, "torch", fake_torch)
@@ -369,6 +534,7 @@ def test_export_file_wrapper_uses_safe_load_and_hash_bound_metadata(tmp_path, mo
     assert metadata["schema"] == "sam3-building-inference-checkpoint-v1"
     assert metadata["format"] == "sam3-detector-prefixed"
     assert metadata["tensor_count"] == 6
+    assert metadata["base_checkpoint_sha256"] is None and metadata["frozen_backbones_from_base"] == []
     assert len(metadata["checkpoint_sha256"]) == len(metadata["source_checkpoint_sha256"]) == 64
     assert result["checkpoint_sha256"] == metadata["checkpoint_sha256"]
     with pytest.raises(FileExistsError):

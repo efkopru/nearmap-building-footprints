@@ -240,16 +240,16 @@ The [Lewisville reviewed results](../results/lewisville/reviewed_2026/README.md)
 
 ## 9. Fine-tune SAM 3
 
-Fine-tuning is optional and has not been run on real data yet. It is the remaining work in [issue #4](https://github.com/efkopru/nearmap-building-footprints/issues/4), currently deferred. The examples below describe files to prepare: `data/labels/` and `data/training/` are not supplied training datasets, and new Lewisville labeling packages have not been prepared.
+Fine-tuning is optional. The steps below ran end to end on Lewisville imagery in November 2026 as a hardware pilot: training, saving, exporting and inference with the exported weights. A full experiment, with frozen results on a fresh test area, is still open in [issue #4](https://github.com/efkopru/nearmap-building-footprints/issues/4). `data/labels/` and `data/training/` in the examples are files you prepare, not supplied datasets.
 
-**Resume with new areas and labels.**
+**What trains.** At the pinned commit Meta's image backbone refuses to run with gradients, so Meta's own recipe stops on its first step. The training config therefore keeps the image and text backbones as released and trains the rest: 40 million of the model's 840 million parameters. The frozen backbones are held in half precision and left out of training checkpoints, which lets training fit a 6 GB GPU.
+
+**Areas and labels.**
 
 1. Draw geographically separate training, validation and fresh test AOIs. Include neighborhoods with small sheds and detached garages, larger buildings and background without buildings. Record the split and separation distance before training. Keep the already-scored test area frozen and out of training or setting selection.
 2. Review every building touching each AOI against its imagery. Use visible roof outlines for permanent roofed buildings, including garages and sheds around 4 m² or larger. Exclude open carports, canopies, pergolas, tents, trailers and vehicles. Keep separately roofed buildings separate, retain a consistent convention for attached buildings, and record uncertain cases or exclusions. The 20 m² reporting threshold is not a labeling cutoff.
-3. Review the fresh test labels without viewing model predictions or agreement candidates, including before the review. Record the reviewer, imagery date, outline convention, complete coverage and any prior model exposure. Resolve uncertain cases and geometry problems, then freeze the labels and their provenance before scoring.
-4. Prepare complete labels for training and validation too. Labeling only small structures would make unlabeled houses look like background during training. Inspect prepared instance masks over their imagery before launching a hardware pilot.
-
-The completed Old Town and test-area review does not need to be repeated for issues #2 or #3. Old Town is a development area; the completed test area remains evidence for the published frozen methods. Use the new test areas for the fine-tuning experiment, since its design is now informed by the published test results.
+3. Make the training and validation labels complete and current. Delete inherited outlines where no roof is visible, whether the building is gone or hidden under trees, and outline every roof, not only the small ones. An outline on grass or tree canopy teaches the model to draw buildings there, and an unlabeled roof teaches it to skip real ones. Inspect the prepared masks over their imagery before training.
+4. Review the fresh test labels without viewing model predictions or agreement candidates, including before the review. Record the reviewer, imagery date, outline convention, complete coverage and any prior model exposure. Resolve uncertain cases and geometry problems, then freeze the labels and their provenance before scoring.
 
 **Prepare training data.** Supply the tile manifest, your outlines, and a polygon layer with a `split` field of `train`, `val` and `test`:
 
@@ -257,9 +257,16 @@ The completed Old Town and test-area review does not need to be repeated for iss
 nbf train prepare-coco --manifest data/tiles/manifest.json --ground-truth data/labels/buildings.gpkg --split-aois data/labels/splits.gpkg --output data/training/buildings_v1 --labels-complete --min-split-distance-m 100
 ```
 
-`--labels-complete` confirms that every building in those areas is outlined, since a missing one would teach the model it isn't a building. Splits are always by area, never random tiles; overlapping splits, buildings crossing a split and tiles in more than one split are refused (`--skip-unassigned` drops boundary tiles instead). The 100 m gap is only an example. Training tiles must have no missing imagery. Each split gets `images/*.png`, a COCO `annotations.json` with one `building` category (masks as RLE, which keeps holes) and `instances/*.tif` instance rasters. Everything is held in memory, so use a subset that fits in RAM.
+`--labels-complete` confirms that every building in those areas is outlined, since a missing one would teach the model it isn't a building. Splits are always by area, never random tiles; overlapping splits, buildings crossing a split and tiles in more than one split are refused (`--skip-unassigned` drops boundary tiles instead). The 100 m gap is only an example. Each split gets `images/*.png`, a COCO `annotations.json` with one `building` category (masks as RLE, which keeps holes) and `instances/*.tif` instance rasters. Everything is held in memory, so use a subset that fits in RAM.
 
-**Run a hardware pilot, then train.** [`configs/sam3_training.example.yaml`](../configs/sam3_training.example.yaml) targets Meta's SAM 3 commit `2345a4ad109ac29c569da749c91d84f10dc08c40` and follows Meta's Roboflow recipe, validating on `val` and leaving `test` untouched. It starts with training and validation batch sizes of 1 and a 20-epoch template. First copy it to a separate pilot config and reduce the pilot duration and dataset to verify a training step, validation, checkpoint saving and memory use. The 6 GB GPU used for inference has not been shown to fit training; batch size 1 does not guarantee it will. Preserve the pilot record before choosing hardware and a full-run budget. In the Linux training environment:
+Two checks are strict by default, and real data usually needs their tolerances. Both are recorded in `preparation.json`:
+
+- **Missing imagery.** A tile with pixels flagged as missing is refused. Where the imagery's nodata value is 0, a few truly black shadow pixels are flagged too; `--min-valid-fraction 0.9999` accepts such tiles.
+- **Overlapping outlines.** Two outlines sharing pixels in a tile are refused, with both named. `--max-overlap-pixels 20` lets neighbours share a sliver, which the earlier outline keeps. A larger overlap is usually a stale or duplicated outline to fix in the labels.
+
+**Set up training.** `bash scripts/setup_sam3.sh --training` adds Meta's training packages to the GPU environment. Meta's loss compiles a small GPU helper the first time it runs, so the environment also needs a C compiler and Python's headers (`sudo apt install build-essential python3.12-dev`); the script checks for them first.
+
+**Run a pilot, then train.** [`configs/sam3_training.example.yaml`](../configs/sam3_training.example.yaml) targets Meta's SAM 3 commit `2345a4ad109ac29c569da749c91d84f10dc08c40` and follows Meta's Roboflow recipe with building masks, one image per step and 20 epochs, validating on `val` and leaving `test` untouched. First run a copy with `max_epochs: 1` to check a training step, validation and checkpoint saving on your hardware. In the Linux training environment:
 
 ```bash
 cp configs/sam3_training.example.yaml /path/to/sam3/sam3/train/configs/buildings.yaml
@@ -270,15 +277,17 @@ export SAM3_CHECKPOINT=/path/to/models/sam3.pt
 nbf train launch --checkout /path/to/sam3 --config /path/to/sam3/sam3/train/configs/buildings.yaml --python /path/to/training-env/bin/python --num-gpus 1
 ```
 
-This prints the plan; add `--execute` to train. The config must sit inside Meta's checkout, because Meta's launcher looks for it there. ([Meta's training guide](https://github.com/facebookresearch/sam3/blob/2345a4ad109ac29c569da749c91d84f10dc08c40/README_TRAIN.md))
+This prints the plan; add `--execute` to train, and `--record outputs/sam3-buildings-v1-run.json` to keep the wall time, exit code and peak GPU memory, whether the run finishes or fails. The config must sit inside Meta's checkout, because Meta's launcher looks for it there. ([Meta's training guide](https://github.com/facebookresearch/sam3/blob/2345a4ad109ac29c569da749c91d84f10dc08c40/README_TRAIN.md))
 
-**Export the weights.** A raw training checkpoint must not go straight to inference: its weights are stored under different names, so the inference loader would silently skip them. Export it first:
+On a 6 GB RTX 4050 under WSL2, a step on a 1024 px tile takes a little over a second and PyTorch's own peak is about 4.8 GB. 20 epochs over 26 tiles, with validation after each, took 29 minutes. That card is at its limit: a GPU that fills up under WSL2 does not stop but spills into shared system memory, and steps become several times slower. The launcher therefore asks PyTorch to release cached memory early (it sets `PYTORCH_CUDA_ALLOC_CONF` unless you have set it).
+
+**Export the weights.** A training checkpoint cannot go straight to inference: its weights are stored under other names, which the inference loader would silently skip, and it does not hold the frozen backbones. Export it together with the released checkpoint the training started from:
 
 ```bash
-nbf train export-checkpoint --input /path/to/outputs/sam3-buildings-v1/checkpoints/checkpoint.pt --output /path/to/models/buildings-inference.pt
+nbf train export-checkpoint --input /path/to/outputs/sam3-buildings-v1/checkpoints/checkpoint.pt --base-checkpoint /path/to/models/sam3.pt --output /path/to/models/buildings-inference.pt
 ```
 
-The export loads with `torch.load(weights_only=True)`, checks every tensor and writes inference-ready weights plus `buildings-inference.pt.metadata.json` with both files' hashes. Keep the original checkpoint to resume training. The fine-tuned model supports the **text** and **exemplar** modes only; use the original checkpoint for box and point. Select the checkpoint, prompt, confidence threshold and cleanup settings on validation data only, then freeze them. Keep the original pretrained SAM 3 as the control and score both models on the same fresh test imagery and frozen labels. Report all-size and ≥20 m² results separately, plus under-20 m² diagnostics, with the same matching and edge rules for each model. This command prints a four-tile inference plan; it is not a complete test-area evaluation:
+The export loads both files with `torch.load(weights_only=True)`, takes the frozen backbones from the released file unchanged, checks every tensor and writes inference-ready weights plus `buildings-inference.pt.metadata.json` with the hashes of all three files. Keep the training checkpoint to resume training. The fine-tuned model supports the **text** and **exemplar** modes only; use the original checkpoint for box and point. Select the checkpoint, prompt, confidence threshold and cleanup settings on validation data only, then freeze them. Keep the original pretrained SAM 3 as the control and score both models on the same fresh test imagery and frozen labels. Report all-size and ≥20 m² results separately, plus under-20 m² diagnostics, with the same matching and edge rules for each model. This command prints a four-tile inference plan; it is not a complete test-area evaluation:
 
 ```bash
 nbf infer --manifest data/test-tiles/manifest.json --method text --text building --checkpoint /path/to/models/buildings-inference.pt --bpe-path /path/to/sam3/sam3/assets/bpe_simple_vocab_16e6.txt.gz --output outputs/sam3_finetuned_text --limit 4

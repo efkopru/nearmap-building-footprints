@@ -53,7 +53,7 @@ The [full results](https://github.com/efkopru/nearmap-building-footprints/blob/m
 
 ## What's next
 
-The review and the scoring above are finished. One task is open: [fine-tuning SAM 3 so that it finds small buildings](https://github.com/efkopru/nearmap-building-footprints/issues/4). It has not started. The [usage guide](https://github.com/efkopru/nearmap-building-footprints/blob/main/docs/USAGE.md#9-fine-tune-sam-3) lists what it needs, starting with newly labeled training, validation and test areas.
+The review and the scoring above are finished. One task is open: [fine-tuning SAM 3 so that it finds small buildings](https://github.com/efkopru/nearmap-building-footprints/issues/4). A first training pilot ran on the laptop GPU in November 2026; the experiment itself has not started. The [usage guide](https://github.com/efkopru/nearmap-building-footprints/blob/main/docs/USAGE.md#9-fine-tune-sam-3) lists what it needs, starting with newly labeled training, validation and test areas.
 
 ## Try it in five minutes
 

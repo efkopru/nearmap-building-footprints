@@ -67,10 +67,21 @@ trainer:
   max_epochs: 20
   val_epoch_freq: 1
   model:
+    # Meta's image model with its image and text backbones frozen. At the pinned commit
+    # the image backbone refuses to run with gradients, so Meta's own builder fails on
+    # the first training step. This package must be installed in the training environment.
+    _target_: nearmap_buildings.training.build_frozen_backbone_model
     device: cpu
     checkpoint_path: ${paths.checkpoint_path}
     load_from_HF: false
     enable_segmentation: true
+  checkpoint:
+    # The frozen backbones are held in half precision to fit a 6 GB GPU and are not written
+    # to training checkpoints. `nbf train export-checkpoint --base-checkpoint` puts the
+    # released ones back, so keep this list and the frozen parts in step.
+    skip_saving_parameters:
+      - backbone.vision_backbone.trunk.*
+      - backbone.language_backbone.*
   data:
     train:
       dataset:
