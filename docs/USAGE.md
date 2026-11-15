@@ -295,7 +295,10 @@ nbf train launch --checkout /path/to/sam3 --config /path/to/sam3/sam3/train/conf
 
 This prints the plan; add `--execute` to train, and `--record outputs/sam3-buildings-v1-run.json` to keep the wall time, exit code and peak GPU memory, whether the run finishes or fails. The config must sit inside Meta's checkout, because Meta's launcher looks for it there. ([Meta's training guide](https://github.com/facebookresearch/sam3/blob/2345a4ad109ac29c569da749c91d84f10dc08c40/README_TRAIN.md))
 
-On a 6 GB RTX 4050 under WSL2, a step on a 1024 px tile takes a little over a second and PyTorch's own peak is about 4.8 GB. 20 epochs over 26 tiles, with validation after each, took 29 minutes. That card is at its limit: a GPU that fills up under WSL2 does not stop but spills into shared system memory, and steps become several times slower. The launcher therefore asks PyTorch to release cached memory early (it sets `PYTORCH_CUDA_ALLOC_CONF` unless you have set it).
+On a 6 GB RTX 4050 under WSL2, a step on a 1024 px tile takes about a second and PyTorch's own peak is 3.7 GB. 20 epochs over 18 tiles, with validation after each, took 11 minutes. Two things keep it inside 6 GB:
+
+- **Masks are compared at sampled points.** Meta's recipe enlarges every predicted mask to the full image, which on a tile with many buildings needs over a gigabyte more and stopped a run here with an out-of-memory error. The template compares each mask at 12,544 sampled points instead, as Mask2Former does. Validation scores stayed within about 0.02 of the full-size comparison. To compare whole masks on a larger GPU, remove the three sampling lines from the template.
+- **Cached memory is released early.** A GPU that fills up under WSL2 may not stop: it can spill into shared system memory, and steps then run several times slower. The launcher sets `PYTORCH_CUDA_ALLOC_CONF` for this unless you have set it.
 
 **Export the weights.** A training checkpoint cannot go straight to inference: its weights are stored under other names, which the inference loader would silently skip, and it does not hold the frozen backbones. Export it together with the released checkpoint the training started from:
 
