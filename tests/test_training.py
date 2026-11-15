@@ -13,6 +13,7 @@ import rasterio
 from rasterio.transform import from_origin
 from shapely.geometry import Polygon, box
 
+from nearmap_buildings import training
 from nearmap_buildings.esri import run_esri
 from nearmap_buildings.import_vectors import import_vectors, main as import_vectors_main
 from nearmap_buildings.training import (SAM3_COMMIT, detector_state_from_trainer, encode_rle,
@@ -264,6 +265,7 @@ def test_launcher_uses_real_entry_and_dry_run_never_spawns(tmp_path, monkeypatch
     config = directory / "buildings.yaml"
     config.write_text("trainer: {}")
     monkeypatch.setattr(subprocess, "run", lambda *a, **k: pytest.fail("unexpected process"))
+    monkeypatch.setattr(subprocess, "Popen", lambda *a, **k: pytest.fail("unexpected process"))
     result = launch_sam3(root, config, python="gpu-python")
     assert result["command"][2:4] == ["-c", "configs/buildings.yaml"]
     assert result["execute"] is False
@@ -271,6 +273,73 @@ def test_launcher_uses_real_entry_and_dry_run_never_spawns(tmp_path, monkeypatch
     external.write_text("trainer: {}")
     with pytest.raises(ValueError, match="inside checkout"):
         launch_sam3(root, external)
+    with pytest.raises(ValueError, match="needs --execute"):
+        launch_sam3(root, config, record=tmp_path / "run.json")
+
+
+def fake_checkout(tmp_path, script):
+    root = tmp_path / "sam3"
+    directory = root / "sam3/train/configs"
+    directory.mkdir(parents=True)
+    (directory.parent / "train.py").write_text(script)
+    config = directory / "buildings.yaml"
+    config.write_text("trainer: {}")
+    return root, config
+
+
+def test_a_failed_training_run_is_reported_plainly_and_still_recorded(tmp_path, monkeypatch):
+    """A pilot that runs out of memory is a result to keep, not a traceback to scroll past."""
+    root, config = fake_checkout(tmp_path, "import sys, time\ntime.sleep(1.5)\nsys.exit(3)\n")
+    readings = iter([2000, 5863, 4100])
+    monkeypatch.setattr(training, "gpu_status", lambda: {"name": "Test GPU", "memory_total_mib": 6141,
+                                                         "memory_used_mib": next(readings, 3000)})
+    record = tmp_path / "records" / "run.json"
+    with pytest.raises(RuntimeError, match="exit code 3"):
+        launch_sam3(root, config, python=sys.executable, execute=True, record=record)
+    saved = json.loads(record.read_text())
+    assert saved["exit_code"] == 3 and saved["wall_seconds"] >= 1
+    assert saved["gpu"] == "Test GPU" and saved["gpu_memory_total_mib"] == 6141
+    assert saved["peak_gpu_memory_used_mib"] == 5863
+    assert saved["config_sha256"] == training.sha256_file(config)
+    assert saved["command"][1].endswith("train.py")
+    # A record is never replaced, and that is checked before anything starts.
+    monkeypatch.setattr(subprocess, "Popen", lambda *a, **k: pytest.fail("unexpected process"))
+    with pytest.raises(FileExistsError, match="Run record exists"):
+        launch_sam3(root, config, python=sys.executable, execute=True, record=record)
+
+
+def test_a_finished_training_run_works_without_a_gpu_reading(tmp_path, monkeypatch):
+    root, config = fake_checkout(tmp_path, "import os\nassert os.environ['PYTHONPATH'].startswith(os.getcwd())\n"
+                                           "assert os.environ['PYTORCH_CUDA_ALLOC_CONF'] == os.environ['EXPECTED']\n")
+    monkeypatch.setattr(training, "gpu_status", lambda: None)
+    # The memory setting is a default only: a value the user set is left alone.
+    monkeypatch.setenv("PYTORCH_CUDA_ALLOC_CONF", "max_split_size_mb:64")
+    monkeypatch.setenv("EXPECTED", "max_split_size_mb:64")
+    launch_sam3(root, config, python=sys.executable, execute=True)
+    monkeypatch.delenv("PYTORCH_CUDA_ALLOC_CONF")
+    monkeypatch.setenv("EXPECTED", "garbage_collection_threshold:0.8")
+    record = tmp_path / "run.json"
+    plan = launch_sam3(root, config, python=sys.executable, execute=True, record=record)
+    assert plan["execute"] is True
+    saved = json.loads(record.read_text())
+    assert saved["exit_code"] == 0 and saved["peak_gpu_memory_used_mib"] is None and saved["gpu"] is None
+    # Without a record nothing is measured or written.
+    monkeypatch.setattr(training, "gpu_status", lambda: pytest.fail("no measurement was asked for"))
+    assert launch_sam3(root, config, python=sys.executable, execute=True)["execute"] is True
+
+
+def test_gpu_status_reads_the_busiest_card_and_tolerates_a_missing_tool(monkeypatch):
+    listing = "NVIDIA A, 6141, 120\nNVIDIA B, 24576, 5863\n"
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: SimpleNamespace(stdout=listing))
+    assert training.gpu_status() == {"name": "NVIDIA B", "memory_total_mib": 24576, "memory_used_mib": 5863}
+
+    def missing(*args, **kwargs):
+        raise FileNotFoundError("nvidia-smi")
+
+    monkeypatch.setattr(subprocess, "run", missing)
+    assert training.gpu_status() is None
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: SimpleNamespace(stdout="not a table\n"))
+    assert training.gpu_status() is None
 
 
 def test_vector_import_reprojects_and_preserves_instances(tmp_path):

@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import time
 import warnings
 
 from .common import read_json, sha256_file
@@ -280,8 +281,25 @@ def prepare_coco(manifest_path, ground_truth, split_aois, output, *, split_field
     return report
 
 
-def launch_sam3(checkout, config, *, python=sys.executable, num_gpus=1, execute=False):
-    """Use the real upstream entry point and its package-relative Hydra config names."""
+def gpu_status():
+    """Name, total and used memory of the busiest GPU from nvidia-smi; None where it is unavailable."""
+    try:
+        text = subprocess.run(["nvidia-smi", "--query-gpu=name,memory.total,memory.used",
+                               "--format=csv,noheader,nounits"], capture_output=True, text=True,
+                              timeout=10, check=True).stdout
+        rows = [[part.strip() for part in line.split(",")] for line in text.splitlines() if line.strip()]
+        name, total, used = max(rows, key=lambda row: int(row[2]))
+        return {"name": name, "memory_total_mib": int(total), "memory_used_mib": int(used)}
+    except (OSError, subprocess.SubprocessError, ValueError, IndexError):
+        return None
+
+
+def launch_sam3(checkout, config, *, python=sys.executable, num_gpus=1, execute=False, record=None):
+    """Use the real upstream entry point and its package-relative Hydra config names.
+
+    With record, a run that was started leaves a JSON receipt whether it finished or failed:
+    wall time, exit code and the highest GPU memory in use, read once a second.
+    """
     checkout, config = Path(checkout).resolve(), Path(config).resolve()
     entry = checkout / "sam3" / "train" / "train.py"
     config_root = checkout / "sam3" / "train"
@@ -291,6 +309,12 @@ def launch_sam3(checkout, config, *, python=sys.executable, num_gpus=1, execute=
         raise ValueError("Place the reviewed YAML config inside checkout/sam3/train/configs before launching")
     if num_gpus < 1:
         raise ValueError("num_gpus must be positive")
+    if record is not None:
+        record = Path(record).resolve()
+        if not execute:
+            raise ValueError("--record describes a run, so it needs --execute")
+        if record.exists():
+            raise FileExistsError(f"Run record exists; choose a new name: {record}")
     command = [str(python), str(entry), "-c", config.relative_to(config_root).as_posix(),
                "--use-cluster", "0", "--num-gpus", str(num_gpus), "--num-nodes", "1"]
     plan = {"cwd": str(checkout), "command": command, "execute": execute,
@@ -298,7 +322,29 @@ def launch_sam3(checkout, config, *, python=sys.executable, num_gpus=1, execute=
     if execute:
         environment = os.environ.copy()
         environment["PYTHONPATH"] = str(checkout) + os.pathsep + environment.get("PYTHONPATH", "")
-        subprocess.run(command, cwd=checkout, env=environment, check=True)
+        # Under WSL2 a full GPU spills into shared system memory instead of failing, and
+        # steps then run many times slower. Reclaiming PyTorch's cache early avoids most of it.
+        environment.setdefault("PYTORCH_CUDA_ALLOC_CONF", "garbage_collection_threshold:0.8")
+        started, clock = datetime.now(timezone.utc), time.monotonic()
+        gpu = gpu_status() if record else None
+        peak = gpu["memory_used_mib"] if gpu else None
+        process = subprocess.Popen(command, cwd=checkout, env=environment)
+        while True:
+            try:
+                code = process.wait(timeout=1 if gpu else None)
+                break
+            except subprocess.TimeoutExpired:
+                peak = max(peak, (gpu_status() or gpu)["memory_used_mib"])
+        if record:
+            record.parent.mkdir(parents=True, exist_ok=True)
+            with record.open("x", encoding="utf-8") as target:
+                json.dump({"schema": "sam3-training-run-v1", **plan, "started_utc": started.isoformat(),
+                           "wall_seconds": round(time.monotonic() - clock, 1), "exit_code": code,
+                           "gpu": gpu and gpu["name"], "gpu_memory_total_mib": gpu and gpu["memory_total_mib"],
+                           "peak_gpu_memory_used_mib": peak,
+                           "memory_note": "whole card, read with nvidia-smi once a second"}, target, indent=2)
+        if code:
+            raise RuntimeError(f"SAM 3 training stopped with exit code {code}; its own messages are above")
     return plan
 
 
@@ -397,6 +443,8 @@ def main(argv=None):
     launch.add_argument("--python", default=sys.executable)
     launch.add_argument("--num-gpus", type=int, default=1)
     launch.add_argument("--execute", action="store_true")
+    launch.add_argument("--record", type=Path,
+                        help="With --execute: new JSON file for wall time, exit code and peak GPU memory")
     export = commands.add_parser("export-checkpoint", help="Convert native training weights for text/exemplar inference")
     export.add_argument("--input", required=True, type=Path, help="Native trainer checkpoint.pt")
     export.add_argument("--output", required=True, type=Path, help="New inference .pt and adjacent metadata JSON")
@@ -412,7 +460,7 @@ def main(argv=None):
                                   max_overlap_pixels=args.max_overlap_pixels)
         elif args.command == "launch":
             result = launch_sam3(args.checkout, args.config, python=args.python,
-                                 num_gpus=args.num_gpus, execute=args.execute)
+                                 num_gpus=args.num_gpus, execute=args.execute, record=args.record)
         else:
             result = export_checkpoint(args.input, args.output)
     except (ValueError, FileNotFoundError, FileExistsError, RuntimeError) as exc:
