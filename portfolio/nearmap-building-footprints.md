@@ -1,8 +1,8 @@
 ---
 title: "Building footprints from aerial imagery: SAM 3 and Esri"
 slug: nearmap-building-footprints
-updated: 2026-10-15
-status: "Reviewed baseline complete; fine-tuning deferred"
+updated: 2026-11-14
+status: "Reviewed baseline complete; fine-tuning prepared"
 category: Geospatial machine learning
 summary: >-
   A shared extraction and evaluation workflow for SAM 3 and Esri building
@@ -15,7 +15,7 @@ tags: [geospatial, computer-vision, remote-sensing, gis, python, evaluation]
 
 The project compares Meta's SAM 3 with Esri's pretrained Building Footprint Extraction model on May 2026 Nearmap imagery of Lewisville, Texas. A Python toolkit prepares imagery, runs or imports predictions, cleans geometry, and evaluates every method using shared rules. The imagery workflow processed 21.1 gigapixels at approximately 10 cm resolution.
 
-**Updated October 15, 2026:** manual reference review and the frozen accuracy evaluation are complete. [Issue #2](https://github.com/efkopru/nearmap-building-footprints/issues/2) and [issue #3](https://github.com/efkopru/nearmap-building-footprints/issues/3) are closed after [PR #29](https://github.com/efkopru/nearmap-building-footprints/pull/29). Small-building fine-tuning in [issue #4](https://github.com/efkopru/nearmap-building-footprints/issues/4) is deferred.
+**Updated November 14, 2026:** the reviewed baseline of October 15 is unchanged: manual reference review and the frozen accuracy evaluation are complete ([issue #2](https://github.com/efkopru/nearmap-building-footprints/issues/2), [issue #3](https://github.com/efkopru/nearmap-building-footprints/issues/3), [PR #29](https://github.com/efkopru/nearmap-building-footprints/pull/29)). For small-building fine-tuning in [issue #4](https://github.com/efkopru/nearmap-building-footprints/issues/4), a training pilot has run and the areas to label are chosen. No fine-tuning result exists yet.
 
 ## Reviewed test-area results
 
@@ -33,7 +33,7 @@ The methods use frozen predictions and settings. This evaluation did not rerun i
 
 Esad reviewed the test area using aerials and historical outlines, and confirmed no exposure to SAM 3 or Esri predictions before or during that review. The documented labeling rules were followed with no unresolved cases. Coverage and independence are reviewer attestations; geometry checks do not establish them. The reviewed reference inherits unchanged geometry and building-splitting conventions from the historical inventory. No second independent reviewer is recorded.
 
-The all-size reference contains 132 outlines under 20 m². SAM 3 and local Esri each match four of them; city Esri matches none. These are size-based diagnostics from the all-size matching, not building-type classifications or differences obtained by subtracting the two evaluation totals.
+The all-size reference contains 132 outlines under 20 m². SAM 3 and local Esri each match four of them; city Esri matches none. These are size-based diagnostics from the all-size matching, not building-type classifications or differences obtained by subtracting the two evaluation totals. Nearly all of those 132 outlines are inherited from the historical inventory. A later check of the tuning area found that most inherited small outlines there show no visible roof ([issue #43](https://github.com/efkopru/nearmap-building-footprints/issues/43)), and the test area has not been rechecked, so this count is not a measured miss rate.
 
 ## Historical inventory agreement
 
@@ -59,13 +59,19 @@ Tile overlap reduces edge losses but does not guarantee complete outlines. Build
 
 ## Remaining work
 
-The frozen reference and published results remain unchanged. Issue #4 requires geographically separate training, validation and fresh test areas. Every eligible building in those areas must be labeled, including houses, garages and sheds. The fresh test review must avoid prediction exposure. Training feasibility on the 6 GB GPU remains unverified; no training run, new checkpoint or fine-tuning result is claimed. Labeling packages for this work have not yet been prepared.
+The frozen reference and published results remain unchanged. For issue #4:
+
+- **Training works on the laptop.** A November 2026 pilot showed that SAM 3 trains on the 6 GB GPU with its image and text backbones frozen, and that the trained weights export and load for inference. Meta's recipe as written cannot train at the pinned version.
+- **The comparison is fixed in advance.** A [protocol](../results/lewisville/finetuning_protocol.md) sets three runs to compare, how settings are chosen on validation squares, and how the test squares are scored once. It lists 38 squares of 208 m to label: 16 test, 6 validation and 16 training, chosen by a seeded rule that reads no model output.
+- **Labels come first.** Comparing the tuning area's reviewed outlines with the imagery found 92 of 393 with no visible roof and at least eight buildings without an outline ([issue #43](https://github.com/efkopru/nearmap-building-footprints/issues/43)). The new areas are therefore labeled as visible roofs only, without model output on screen.
+- **Not done:** the new areas are not yet reviewed, and no fine-tuning result is claimed.
 
 ## Files and guides
 
 - [Two-page public summary](nearmap-building-footprints.pdf)
 - [Full report, 11 pages](../results/lewisville/Lewisville_building_footprint_comparison.pdf)
 - [Results and historical comparisons](../results/lewisville/README.md)
+- [Fine-tuning protocol and areas](../results/lewisville/finetuning_protocol.md)
 - [Usage guide](../docs/USAGE.md)
 - [Methodology](../docs/METHODOLOGY.md)
 - [Walkthrough notebooks](../notebooks/README.md)

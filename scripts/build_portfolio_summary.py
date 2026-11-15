@@ -69,7 +69,7 @@ def build_pdf(destination):
         canvas.line(42, 42, 570, 42)
         canvas.setFillColor(muted)
         canvas.setFont("Helvetica", 7.5)
-        canvas.drawString(42, 28, "Public summary | updated October 15, 2026")
+        canvas.drawString(42, 28, "Public summary | updated November 14, 2026")
         canvas.drawRightString(570, 28, f"{page} / 2")
 
     def table(headers, values, widths, y):
@@ -110,7 +110,7 @@ def build_pdf(destination):
     y = table(["Method", "All-size F1", "Missed reference"],
               [[NAMES[row["method_key"]], f"{float(row['f1']):.3f}", row["fn"]] for row in all_sizes],
               [270, 120, 138], y) - 13
-    y = paragraph("In the all-size matching, SAM 3 and local Esri each match 4 of the 132 reference outlines under 20 m²; city Esri matches none. These area classes do not identify building types.", y, "small") - 10
+    y = paragraph("In the all-size matching, SAM 3 and local Esri each match 4 of the 132 reference outlines under 20 m²; city Esri matches none. These area classes do not identify building types. Nearly all of those outlines are inherited, and a later check of the tuning area found that most inherited small outlines there show no visible roof, so this count is not a measured miss rate.", y, "small") - 10
     y = paragraph("<b>Scope:</b> these results describe one reviewed test square. They do not establish city-wide accuracy. Changes from historical scores reflect the changed reference and scoring policy, not an improvement in the models.", y, "small")
     if y < 58:
         raise ValueError("Page 1 content exceeds the safe layout")
@@ -130,12 +130,13 @@ def build_pdf(destination):
     y = paragraph("<b>Human review:</b> Esad completed both review areas and confirmed the labeling rules and no unresolved cases. The test review used only aerials and historical outlines, with no prior or concurrent prediction exposure. These are reviewer attestations. The reference retains inherited geometry and splitting conventions; no second independent reviewer is recorded.", y) - 10
     y = paragraph("<b>Workflow:</b> hash-linked tile manifests, resumable inference, chunk ownership for ArcGIS execution, shared cleanup, explicit boundary handling, and one-to-one scoring. Automated tests cover Windows and Ubuntu. Tile overlap reduces edge losses; buildings longer than a tile can still be split.", y) - 10
     y = paragraph("<b>Publication:</b> committed aggregates, charts and provenance support report regeneration. Raw imagery, reviewed labels, prediction geometry and full receipts remain local. The full report retains its previously published screenshots. Public files alone cannot reproduce the geometric evaluation.", y) - 18
-    y = heading("Completed baseline; fine-tuning deferred", y)
-    y = paragraph("Reference review (#2) and frozen evaluation (#3) are complete following merged PR #29. Remaining issue #4 requires separate training, validation and fresh test areas, with every eligible building labeled and no prediction exposure during fresh test review. Preserve the completed test reference and scores. Labeling packages for #4 have not been prepared. Training feasibility on the 6 GB GPU remains unverified.", y) - 16
+    y = heading("Completed baseline; fine-tuning prepared", y)
+    y = paragraph("Reference review (#2) and frozen evaluation (#3) are complete and unchanged. For small-building fine-tuning (#4), a November 2026 pilot showed that training runs on the 6 GB laptop GPU with the model's two backbones frozen, and a protocol fixes the comparison and 38 areas to label, chosen without model output. Comparing the tuning area's outlines with the imagery (#43) found 92 of 393 with no visible roof; the test area has not been rechecked. The new areas are not yet reviewed, and no fine-tuning result is claimed.", y) - 16
     y = heading("Public evidence and guides", y)
     links = [
         ("Repository and setup", REPO),
         ("Reviewed scores, protocol and provenance", REPO + "/tree/main/results/lewisville/reviewed_2026"),
+        ("Fine-tuning protocol and areas", REPO + "/blob/main/results/lewisville/finetuning_protocol.md"),
         ("Full comparison report, 11 pages", REPO + "/blob/main/results/lewisville/Lewisville_building_footprint_comparison.pdf"),
         ("Usage and reproduction guide", REPO + "/blob/main/docs/USAGE.md"),
     ]
