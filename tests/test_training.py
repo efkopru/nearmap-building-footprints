@@ -153,6 +153,21 @@ def test_boundary_tile_rejected_instead_of_centroid_assignment(tmp_path):
         prepare(inputs, tmp_path / "out", skip_unassigned=True)
 
 
+def test_tile_cut_exactly_along_an_aoi_edge_counts_as_inside(tmp_path):
+    """Squares aligned to the tile grid differ from their tiles only by rounding."""
+    inputs = make_data(tmp_path / "source")
+    frame = gpd.read_file(inputs[2])
+    frame.loc[0, "geometry"] = box(1e-9, 1e-9, 10 - 1e-9, 10 - 1e-9)
+    frame.to_file(inputs[2])
+    report = prepare(inputs, tmp_path / "out")
+    assert report["counts"]["train"]["images"] == 1 and report["skipped_tiles"] == []
+    # A tenth of a pixel is a real difference, and is still refused.
+    frame.loc[0, "geometry"] = box(0, 0, 9.9, 10)
+    frame.to_file(inputs[2])
+    with pytest.raises(ValueError, match="not wholly within"):
+        prepare(inputs, tmp_path / "strict")
+
+
 @pytest.mark.parametrize("key,value,message", [("bounds", [0, 0, 11, 10], "bounds disagree"),
                                                 ("width", 12, "dimensions disagree"),
                                                 ("crs", "EPSG:4326", "CRS missing or disagrees")])
