@@ -467,11 +467,41 @@ def test_checkpoint_export_rejects_partial_or_nontensor_state():
         detector_state_from_trainer({"model": state}, is_tensor=lambda value: isinstance(value, np.ndarray))
 
 
+def test_released_backbones_replace_whatever_the_trainer_state_holds():
+    def is_array(value):
+        return isinstance(value, np.ndarray)
+
+    trained = native_state(lambda: np.array([2.0]))
+    released = {"model": {**{f"detector.{key}": np.array([1.0]) for key in native_state()},
+                          "detector.backbone.vision_backbone.trunk.extra": np.array([1.0]),
+                          "tracker.memory.weight": np.array([1.0])}}
+    merged = detector_state_from_trainer({"model": trained}, is_tensor=is_array, released=released)
+    assert merged["detector.backbone.vision_backbone.trunk.weight"][0] == 1.0
+    assert merged["detector.backbone.language_backbone.encoder.weight"][0] == 1.0
+    assert merged["detector.transformer.encoder.weight"][0] == 2.0
+    assert "detector.backbone.vision_backbone.trunk.extra" in merged and not any("tracker" in key for key in merged)
+
+    # A recipe that leaves the frozen backbones out of its checkpoints.
+    slim = {key: value for key, value in trained.items() if not key.startswith("backbone.")}
+    slim["backbone.vision_backbone.convs.weight"] = np.array([2.0])
+    with pytest.raises(ValueError, match="needs --base-checkpoint"):
+        detector_state_from_trainer({"model": slim}, is_tensor=is_array)
+    merged = detector_state_from_trainer({"model": slim}, is_tensor=is_array, released=released)
+    assert merged["detector.backbone.vision_backbone.convs.weight"][0] == 2.0
+    assert merged["detector.backbone.vision_backbone.trunk.weight"][0] == 1.0
+    with pytest.raises(ValueError, match="holds no weights for backbone.language_backbone"):
+        detector_state_from_trainer({"model": slim}, is_tensor=is_array, released={
+            "detector.backbone.vision_backbone.trunk.weight": np.array([1.0])})
+    with pytest.raises(ValueError, match="mapping of detector weights"):
+        detector_state_from_trainer({"model": slim}, is_tensor=is_array, released=[1, 2])
+
+
 def test_export_file_wrapper_uses_safe_load_and_hash_bound_metadata(tmp_path, monkeypatch):
     class TensorStandIn:
         device = SimpleNamespace(type="cpu")
         layout = "strided"
         is_quantized = False
+        dtype = "float32"
 
         def is_floating_point(self):
             return True
@@ -489,7 +519,7 @@ def test_export_file_wrapper_uses_safe_load_and_hash_bound_metadata(tmp_path, mo
         calls["saved"] = payload
         handle.write(b"mock serialized inference checkpoint")
 
-    fake_torch = SimpleNamespace(load=safe_load, save=save, strided="strided",
+    fake_torch = SimpleNamespace(load=safe_load, save=save, strided="strided", float32="float32",
                                  is_tensor=lambda value: isinstance(value, TensorStandIn),
                                  isfinite=lambda value: np.array([True]))
     monkeypatch.setitem(sys.modules, "torch", fake_torch)
@@ -504,6 +534,7 @@ def test_export_file_wrapper_uses_safe_load_and_hash_bound_metadata(tmp_path, mo
     assert metadata["schema"] == "sam3-building-inference-checkpoint-v1"
     assert metadata["format"] == "sam3-detector-prefixed"
     assert metadata["tensor_count"] == 6
+    assert metadata["base_checkpoint_sha256"] is None and metadata["frozen_backbones_from_base"] == []
     assert len(metadata["checkpoint_sha256"]) == len(metadata["source_checkpoint_sha256"]) == 64
     assert result["checkpoint_sha256"] == metadata["checkpoint_sha256"]
     with pytest.raises(FileExistsError):
