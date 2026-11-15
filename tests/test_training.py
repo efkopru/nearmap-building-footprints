@@ -190,6 +190,72 @@ def test_nodata_imagery_is_not_used_as_exhaustive_supervision(tmp_path):
     assert not (tmp_path / "out").exists()
 
 
+def test_sliver_overlaps_pass_only_with_an_explicit_tolerance(tmp_path):
+    """Attached buildings drawn separately often share a sliver; stacked outlines must still fail."""
+    inputs = make_data(tmp_path / "source")
+    gpd.GeoDataFrame(geometry=[box(1, 1, 5, 5), box(4, 4, 6, 6)], crs="EPSG:26914").to_file(inputs[1])
+    with pytest.raises(ValueError, match=r"buildings 1 and 2, 1 pixels"):
+        prepare(inputs, tmp_path / "strict")
+    report = prepare(inputs, tmp_path / "out", max_overlap_pixels=1)
+    assert report["max_overlap_pixels"] == 1
+    assert report["overlaps_resolved"] == [{"tile_id": "train", "kept_by": 1, "removed_from": 2, "pixels": 1}]
+    first, second = json.loads((tmp_path / "out/train/annotations.json").read_text())["annotations"]
+    assert (first["area"], second["area"], second["bbox"]) == (16, 3, [4, 4, 2, 2])
+    # The earlier outline keeps the shared pixel, so the two masks stay disjoint.
+    assert not (decode_rle(first["segmentation"]) & decode_rle(second["segmentation"])).any()
+    with rasterio.open(tmp_path / "out/train/instances/tile_000001.tif") as src:
+        values = src.read(1)
+        assert (values == 1).sum() == 16 and (values == 2).sum() == 3
+
+    gpd.GeoDataFrame(geometry=[box(1, 1, 5, 5), box(3, 3, 6, 6)], crs="EPSG:26914").to_file(inputs[1])
+    with pytest.raises(ValueError, match=r"buildings 1 and 2, 4 pixels"):
+        prepare(inputs, tmp_path / "stacked", max_overlap_pixels=1)
+    for bad in (-1, 1.5, True):
+        with pytest.raises(ValueError, match="max_overlap_pixels"):
+            prepare(inputs, tmp_path / "bad", max_overlap_pixels=bad)
+    assert not (tmp_path / "stacked").exists() and not (tmp_path / "bad").exists()
+
+
+def flag_missing(path, pixels):
+    with rasterio.open(path, "r+") as src:
+        valid = np.full((src.height, src.width), 255, dtype=np.uint8)
+        valid.ravel()[:pixels] = 0
+        src.write_mask(valid)
+
+
+def test_a_few_black_pixels_pass_only_with_an_explicit_tolerance(tmp_path):
+    """Where the nodata value is 0, a truly black shadow pixel is flagged as missing."""
+    inputs = make_data(tmp_path / "source")
+    flag_missing(inputs[0].parent / "train.tif", 1)
+    with pytest.raises(ValueError, match=r"nodata pixels present \(1 of 100\)"):
+        prepare(inputs, tmp_path / "strict")
+    with pytest.raises(ValueError, match="nodata pixels present"):
+        prepare(inputs, tmp_path / "too-strict", min_valid_fraction=0.995)
+    report = prepare(inputs, tmp_path / "out", min_valid_fraction=0.99)
+    assert report["min_valid_fraction"] == 0.99
+    assert report["tiles_with_missing_pixels"] == [{"tile_id": "train", "missing_pixels": 1}]
+    assert report["counts"]["train"]["images"] == 1
+    for bad in (0, 1.5, -1):
+        with pytest.raises(ValueError, match="min_valid_fraction"):
+            prepare(inputs, tmp_path / "bad", min_valid_fraction=bad)
+
+
+def test_missing_pixels_in_a_skipped_tile_do_not_stop_the_run(tmp_path):
+    inputs = make_data(tmp_path / "source")
+    folder = inputs[0].parent
+    with rasterio.open(folder / "outside.tif", "w", driver="GTiff", width=10, height=10, count=3, dtype="uint8",
+                       crs="EPSG:26914", transform=from_origin(200, 10, 1, 1)) as dst:
+        dst.write(np.zeros((3, 10, 10), dtype=np.uint8))
+    flag_missing(folder / "outside.tif", 100)
+    manifest = json.loads(inputs[0].read_text())
+    manifest["tiles"].append({"id": "outside", "path": "outside.tif", "row_off": 0, "col_off": 200, "width": 10,
+                              "height": 10, "crs": "EPSG:26914", "bounds": [200, 0, 210, 10]})
+    inputs[0].write_text(json.dumps(manifest))
+    report = prepare(inputs, tmp_path / "out", skip_unassigned=True)
+    assert [tile["tile_id"] for tile in report["skipped_tiles"]] == ["outside"]
+    assert report["tiles_with_missing_pixels"] == []
+
+
 def test_launcher_uses_real_entry_and_dry_run_never_spawns(tmp_path, monkeypatch):
     root = tmp_path / "sam3"
     directory = root / "sam3/train/configs"

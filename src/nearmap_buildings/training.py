@@ -85,12 +85,15 @@ def validate_splits(frame, field="split", min_distance_m=0):
 
 def prepare_coco(manifest_path, ground_truth, split_aois, output, *, split_field="split",
                  ground_truth_layer=None, split_layer=None, bands=(1, 2, 3),
-                 min_split_distance_m=0, skip_unassigned=False, labels_complete=False):
+                 min_split_distance_m=0, skip_unassigned=False, labels_complete=False,
+                 min_valid_fraction=1.0, max_overlap_pixels=0):
     """Write COCO RLE, uint32 instance rasters and RGB PNGs after explicit spatial checks.
 
     One polygon feature is one building instance; MultiPolygon components and holes
     remain one instance. All visible buildings must be labeled, including in tiles
-    that will become negative examples.
+    that will become negative examples. A tile with pixels flagged as missing imagery
+    is refused unless its valid share reaches min_valid_fraction, and two outlines
+    sharing more than max_overlap_pixels in a tile are refused.
     """
     import geopandas as gpd
     import numpy as np
@@ -107,6 +110,10 @@ def prepare_coco(manifest_path, ground_truth, split_aois, output, *, split_field
         raise FileExistsError(f"Use a new output directory: {output}")
     if len(bands) != 3 or len(set(bands)) != 3 or any(b < 1 for b in bands):
         raise ValueError("bands must be three distinct positive band numbers in RGB order")
+    if not 0 < min_valid_fraction <= 1:
+        raise ValueError("min_valid_fraction must be above 0 and at most 1")
+    if isinstance(max_overlap_pixels, bool) or not isinstance(max_overlap_pixels, int) or max_overlap_pixels < 0:
+        raise ValueError("max_overlap_pixels must be a whole number, 0 or more")
     manifest = read_json(manifest_path)
     tiles = manifest.get("tiles")
     if not isinstance(tiles, list) or not tiles:
@@ -121,7 +128,7 @@ def prepare_coco(manifest_path, ground_truth, split_aois, output, *, split_field
         if len(hits) > 1:
             raise ValueError(f"Ground-truth building {index + 1} crosses split AOIs: {hits}")
 
-    jobs, skipped, seen_ids, seen_paths = [], [], set(), set()
+    jobs, skipped, missing_pixels, seen_ids, seen_paths = [], [], [], set(), set()
     split_counts = dict.fromkeys(SPLITS, 0)
     required = {"id", "path", "row_off", "col_off", "width", "height", "crs", "bounds"}
     for tile in tiles:
@@ -157,8 +164,6 @@ def prepare_coco(manifest_path, ground_truth, split_aois, output, *, split_field
                 raise ValueError(f"Tile {tile_id}: invalid affine transform")
             if max(bands) > source.count or any(source.dtypes[b - 1] != "uint8" for b in bands):
                 raise ValueError(f"Tile {tile_id}: choose three existing uint8 RGB bands; no implicit stretch")
-            if not (source.dataset_mask() > 0).all():
-                raise ValueError(f"Tile {tile_id}: nodata pixels present; select fully valid imagery for exhaustive training labels")
             footprint = Polygon([transform @ point for point in
                                  [(0, 0), (source.width, 0), (source.width, source.height), (0, source.height)]])
             split_footprint = gpd.GeoSeries([footprint], crs=source.crs).to_crs(splits.crs).iloc[0]
@@ -168,6 +173,15 @@ def prepare_coco(manifest_path, ground_truth, split_aois, output, *, split_field
                     skipped.append({"tile_id": tile_id, "reason": "not wholly within exactly one split AOI"})
                     continue
                 raise ValueError(f"Tile {tile_id} is not wholly within exactly one split AOI; trim the manifest or explicitly --skip-unassigned")
+            # Checked only for tiles that reach training. Where the nodata value is 0, a
+            # truly black pixel (deep shadow) is flagged too, so a tolerance can be set.
+            missing = int((source.dataset_mask() == 0).sum())
+            if missing:
+                if 1 - missing / (source.width * source.height) < min_valid_fraction:
+                    raise ValueError(f"Tile {tile_id}: nodata pixels present ({missing} of {source.width * source.height}); "
+                                     "exhaustive training labels need complete imagery. If these are isolated black "
+                                     "pixels in imagery whose nodata value is 0, allow them with --min-valid-fraction")
+                missing_pixels.append({"tile_id": tile_id, "missing_pixels": missing})
             split_name = owners[0]
             jobs.append((tile, path, split_name, footprint, source.crs, transform))
             split_counts[split_name] += 1
@@ -178,7 +192,7 @@ def prepare_coco(manifest_path, ground_truth, split_aois, output, *, split_field
     # leave a plausible-looking partial dataset. RGB imagery is read only when writing.
     datasets = {name: {"images": [], "annotations": [], "categories": [{"id": 1, "name": "building"}]}
                 for name in SPLITS}
-    mask_jobs, small_instances, ann_id = [], [], 1
+    mask_jobs, small_instances, overlaps, ann_id = [], [], [], 1
     projected_truth = {}
     for image_id, (tile, path, split_name, footprint, crs, transform) in enumerate(jobs, 1):
         crs_key = crs.to_wkt()
@@ -188,20 +202,31 @@ def prepare_coco(manifest_path, ground_truth, split_aois, output, *, split_field
         candidates = sorted(layer.sindex.query(footprint, predicate="intersects").tolist())
         h, w = tile["height"], tile["width"]
         instances = np.zeros((h, w), dtype=np.uint32)
-        local_id = 0
+        local_id, sources = 0, [None]
         for source_index in candidates:
             geom = layer.geometry.iloc[source_index].intersection(footprint)
             if geom.is_empty or geom.area == 0:
                 continue
             mask = rasterize([(geom, 1)], out_shape=(h, w), transform=transform,
                              all_touched=False, dtype="uint8")
+            # Neighbouring outlines can share a sliver. Up to the allowed size the earlier
+            # outline keeps those pixels; anything larger is a label problem to fix first.
+            shared = instances[mask != 0]
+            for other in np.unique(shared[shared != 0]).tolist():
+                pixels = int((shared == other).sum())
+                if pixels > max_overlap_pixels:
+                    raise ValueError(f"Tile {tile['id']}: ground-truth instances overlap in raster pixels "
+                                     f"(buildings {sources[other]} and {source_index + 1}, {pixels} pixels); fix the "
+                                     "labels, or allow small slivers with --max-overlap-pixels")
+                overlaps.append({"tile_id": str(tile["id"]), "kept_by": sources[other],
+                                 "removed_from": source_index + 1, "pixels": pixels})
+            mask[instances != 0] = 0
             rows, cols = np.nonzero(mask)
             if not len(rows):
                 small_instances.append({"tile_id": str(tile["id"]), "source_id": source_index + 1})
                 continue
-            if np.any(instances[mask != 0]):
-                raise ValueError(f"Tile {tile['id']}: ground-truth instances overlap in raster pixels")
             local_id += 1
+            sources.append(source_index + 1)
             instances[mask != 0] = local_id
             datasets[split_name]["annotations"].append({
                 "id": ann_id, "image_id": image_id, "category_id": 1, "iscrowd": 0,
@@ -247,6 +272,8 @@ def prepare_coco(manifest_path, ground_truth, split_aois, output, *, split_field
               "counts": {name: {"images": len(data["images"]), "instances": len(data["annotations"])}
                          for name, data in datasets.items()},
               "skipped_tiles": skipped, "subpixel_instances_omitted": small_instances,
+              "min_valid_fraction": min_valid_fraction, "tiles_with_missing_pixels": missing_pixels,
+              "max_overlap_pixels": max_overlap_pixels, "overlaps_resolved": overlaps,
               "segmentation": "COCO uncompressed RLE; one annotation per building; uint32 instance rasters",
               "sam3_loader": "sam3.train.data.coco_json_loaders.COCO_FROM_JSON"}
     (output / "preparation.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
@@ -359,6 +386,10 @@ def main(argv=None):
     prepare.add_argument("--bands", type=int, nargs=3, default=[1, 2, 3])
     prepare.add_argument("--min-split-distance-m", type=float, default=0)
     prepare.add_argument("--skip-unassigned", action="store_true")
+    prepare.add_argument("--min-valid-fraction", type=float, default=1.0,
+                         help="Accept tiles with this share of valid pixels; lower it slightly when nodata is 0 and shadows are black")
+    prepare.add_argument("--max-overlap-pixels", type=int, default=0,
+                         help="Let two outlines share up to this many pixels in a tile; the earlier outline keeps them")
     prepare.add_argument("--labels-complete", action="store_true", help="Confirm all visible buildings in retained tiles are annotated")
     launch = commands.add_parser("launch", help="Print official SAM 3 training command; --execute runs it")
     launch.add_argument("--checkout", required=True, type=Path)
@@ -376,7 +407,9 @@ def main(argv=None):
                                   split_field=args.split_field, ground_truth_layer=args.ground_truth_layer,
                                   split_layer=args.split_layer, bands=args.bands,
                                   min_split_distance_m=args.min_split_distance_m,
-                                  skip_unassigned=args.skip_unassigned, labels_complete=args.labels_complete)
+                                  skip_unassigned=args.skip_unassigned, labels_complete=args.labels_complete,
+                                  min_valid_fraction=args.min_valid_fraction,
+                                  max_overlap_pixels=args.max_overlap_pixels)
         elif args.command == "launch":
             result = launch_sam3(args.checkout, args.config, python=args.python,
                                  num_gpus=args.num_gpus, execute=args.execute)
