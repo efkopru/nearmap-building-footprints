@@ -36,6 +36,13 @@ roboflow_train:
         focal_gamma: 2.0
         weight_dict: {loss_mask: 200.0, loss_dice: 10.0}
         compute_aux: false
+        # Compare masks at sampled points, as Mask2Former does, instead of enlarging every
+        # predicted mask to the full image. On a tile with many buildings the full-size
+        # comparison needs over a gigabyte more, which a 6 GB GPU does not have. Remove
+        # these three lines to compare whole masks, as Meta's recipe does, on a larger GPU.
+        num_sample_points: 12544
+        oversample_ratio: 3.0
+        importance_sample_ratio: 0.75
     loss_fn_semantic_seg: null
   val_transforms:
     - _target_: sam3.train.transforms.basic_for_api.ComposeAPI
@@ -82,6 +89,9 @@ trainer:
     skip_saving_parameters:
       - backbone.vision_backbone.trunk.*
       - backbone.language_backbone.*
+    # Besides the latest checkpoint.pt, keep checkpoint_5.pt, checkpoint_10.pt and so on,
+    # so that validation can choose among them (about 0.5 GB each).
+    save_freq: 5
   data:
     train:
       dataset:

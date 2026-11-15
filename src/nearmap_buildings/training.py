@@ -168,7 +168,11 @@ def prepare_coco(manifest_path, ground_truth, split_aois, output, *, split_field
             footprint = Polygon([transform @ point for point in
                                  [(0, 0), (source.width, 0), (source.width, source.height), (0, source.height)]])
             split_footprint = gpd.GeoSeries([footprint], crs=source.crs).to_crs(splits.crs).iloc[0]
-            owners = [name for name, area in areas.items() if area.covers(split_footprint)]
+            # A tile cut exactly along an AOI's edge differs from it by rounding in the last
+            # decimal places. Pull the footprint in by a millionth of its perimeter, far less
+            # than a pixel, so that such a tile still counts as inside.
+            inner = split_footprint.buffer(-1e-6 * split_footprint.length, join_style="mitre")
+            owners = [name for name, area in areas.items() if area.covers(inner)]
             if len(owners) != 1:
                 if skip_unassigned:
                     skipped.append({"tile_id": tile_id, "reason": "not wholly within exactly one split AOI"})

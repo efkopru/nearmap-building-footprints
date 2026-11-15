@@ -117,3 +117,13 @@ This is why the second run exists: fine-tuning has to beat the released model at
 ## Amendments
 
 Any change is added below with its date and reason, before the step it affects.
+
+### Amendment 1, 2026-11-14
+
+Made before any square was reviewed, after rehearsing every step on Old Town with provisional labels. It settles details the text above left open and changes nothing else.
+
+- **Tiles for inference** are cut square by square, each square with 295 px (30 m) around it, so that a building on a square's edge is seen whole before it is left out.
+- **Squares are scored one by one** and their counts added up. An outline crossing a square's edge is therefore left out even where two squares of a list touch.
+- **Ties between checkpoints.** After the three preferences already listed, the earlier checkpoint is taken.
+- **Training template.** Before any training for the experiment, the template gained two settings. Masks are compared at 12,544 sampled points each instead of at full size, which training on the 6 GB GPU needs: the full-size comparison stopped a rehearsal run with an out-of-memory error. A checkpoint is kept every five epochs.
+- **Tools.** `nbf tile --areas` cuts the tiles, and [`scripts/finetune_protocol.py`](../../scripts/finetune_protocol.py) freezes the labels, makes the choice on the validation squares and scores the test squares. It writes the choice and the test scores once each and refuses to replace them.
