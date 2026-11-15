@@ -272,8 +272,14 @@ def clean_polygons(frame: gpd.GeoDataFrame, *, crs: str | CRS,
                    angle_tolerance: float = 10.0,
                    duplicate_priority: str = "complete",
                    seam_tiles: gpd.GeoDataFrame | None = None,
-                   seam_merge_iou: float = 0.5) -> CleanupResult:
+                   seam_merge_iou: float = 0.5, min_score: float | None = None,
+                   small_min_score: float | None = None, small_area: float = 20.0) -> CleanupResult:
     """Clean then prioritize duplicates, without merging adjacent instances.
+
+    min_score drops outlines scoring below it before anything else, as if inference
+    had used that confidence. small_min_score replaces it for outlines under
+    small_area square metres: a cut-off chosen for main buildings discards most
+    small roofs. A missing score counts as below any cut-off.
 
     seam_tiles (tile_id, width, height and tile extents, as manifest_tiles returns)
     turns on seam merging before duplicate suppression: edge_touch pieces from two
@@ -300,6 +306,14 @@ def clean_polygons(frame: gpd.GeoDataFrame, *, crs: str | CRS,
         raise ValueError("invalid regularization bounds")
     if not math.isfinite(seam_merge_iou) or not 0 < seam_merge_iou <= 1:
         raise ValueError("seam merge IoU must be in (0, 1]")
+    cutoffs = [value for value in (min_score, small_min_score) if value is not None]
+    if any(isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value)
+           or not 0 <= value <= 1 for value in cutoffs):
+        raise ValueError("score cut-offs must be between 0 and 1")
+    if not math.isfinite(small_area) or small_area <= 0:
+        raise ValueError("small_area must be positive")
+    if cutoffs and "score" not in frame.columns:
+        raise ValueError("a score cut-off needs a 'score' field in the input")
     data = frame.to_crs(target).copy().reset_index(drop=True)
     reserved = {"cleanup_id", "cleanup_flags", "raw_area_m2", "area_m2", "removed_reason",
                 "kept_cleanup_id", "duplicate_iou", "duplicate_containment", "merged_cleanup_ids"}
@@ -338,6 +352,18 @@ def clean_polygons(frame: gpd.GeoDataFrame, *, crs: str | CRS,
             candidates.append(index)
     scores = pd.to_numeric(data["score"], errors="coerce") if "score" in data else pd.Series(np.nan, index=data.index)
     scores = scores.where(np.isfinite(scores), -np.inf)
+    if cutoffs:
+        # Before seam merging and duplicate removal: a complete low-score copy must not
+        # first displace a higher-scoring cut copy and then be dropped itself.
+        passing = []
+        for index in candidates:
+            small = small_min_score is not None and data.at[index, "area_m2"] < small_area
+            limit = small_min_score if small else min_score
+            if limit is not None and scores.iloc[index] < limit:
+                data.at[index, "removed_reason"] = "below_min_score"
+            else:
+                passing.append(index)
+        candidates = passing
     if seam_tiles is not None:
         if seam_tiles.crs is None:
             raise ValueError("seam merging tiles need a CRS")
@@ -460,6 +486,11 @@ def main(argv=None):
     parser.add_argument("--output", required=True, help="GPKG with cleaned and removed_audit layers")
     parser.add_argument("--metric-crs", required=True, help="projected CRS in metres, e.g. EPSG:26914")
     parser.add_argument("--min-area-m2", type=float, default=4.0)
+    parser.add_argument("--min-score", type=float, help="drop outlines scoring below this, before anything else")
+    parser.add_argument("--small-min-score", type=float,
+                        help="the cut-off for small outlines instead; a main-building cut-off discards most small roofs")
+    parser.add_argument("--small-below-m2", type=float, default=20.0,
+                        help="outlines under this area use --small-min-score")
     parser.add_argument("--simplify-m", type=float, default=0.0)
     parser.add_argument("--iou-threshold", type=float, default=0.7)
     parser.add_argument("--containment-threshold", type=float, default=0.98)
@@ -486,12 +517,18 @@ def main(argv=None):
                             max_displacement=args.max_displacement_m, max_area_change=args.max_area_change,
                             angle_tolerance=args.angle_tolerance_deg, duplicate_priority=args.duplicate_priority,
                             seam_tiles=manifest_tiles(args.seam_merge_manifest) if args.seam_merge_manifest else None,
-                            seam_merge_iou=args.seam_merge_iou)
+                            seam_merge_iou=args.seam_merge_iou, min_score=args.min_score,
+                            small_min_score=args.small_min_score, small_area=args.small_below_m2)
     write_layers(output, {"cleaned": result.cleaned, "removed_audit": result.removed}, overwrite=args.overwrite)
-    print(json.dumps({"input_count": len(frame), "cleaned_count": len(result.cleaned),
-                      "removed_count": len(result.removed), "duplicate_priority": args.duplicate_priority,
-                      "seam_merged": int((result.removed.removed_reason == "seam_merged").sum()),
-                      "raw_inputs_preserved": True}))
+    summary = {"input_count": len(frame), "cleaned_count": len(result.cleaned),
+               "removed_count": len(result.removed), "duplicate_priority": args.duplicate_priority,
+               "seam_merged": int((result.removed.removed_reason == "seam_merged").sum()),
+               "raw_inputs_preserved": True}
+    if args.min_score is not None or args.small_min_score is not None:
+        summary.update({"min_score": args.min_score, "small_min_score": args.small_min_score,
+                        "small_below_m2": args.small_below_m2,
+                        "below_min_score": int((result.removed.removed_reason == "below_min_score").sum())})
+    print(json.dumps(summary))
 
 
 if __name__ == "__main__":
