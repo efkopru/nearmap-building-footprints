@@ -156,7 +156,9 @@ SAM 3 used up to 96% of the GPU's memory, close to the limit but stable through 
 
 ## Next steps
 
-The open task is [#4](https://github.com/efkopru/nearmap-building-footprints/issues/4): fine-tuning SAM 3 to raise its low recall on small buildings. It needs separate training, validation and fresh test areas in which every building is labeled, and the completed test area must stay out of training and setting selection. The [fine-tuning guide](../../docs/USAGE.md#9-fine-tune-sam-3) lists the steps.
+The open task is [#4](https://github.com/efkopru/nearmap-building-footprints/issues/4): fine-tuning SAM 3 to raise its low recall on small buildings. A pilot in November 2026 showed that training runs on the 6 GB laptop GPU with the model's two backbones frozen. What it needs now is labels: separate training, validation and fresh test areas in which every visible roof is outlined, with the completed test area kept out of training and setting selection. The [fine-tuning guide](../../docs/USAGE.md#9-fine-tune-sam-3) lists the steps.
+
+The pilot also compared the reviewed Old Town outlines with the imagery, because they were to be its training labels ([#43](https://github.com/efkopru/nearmap-building-footprints/issues/43)). Of the 393, 92 show no visible roof: the spot is parking, grass, bare ground or unbroken tree canopy. That includes 51 of the 69 outlines under 20 m². At least eight buildings have no outline. Old Town was the tuning area, so no reviewed accuracy score rests on it. The test area was reviewed in the same way and has not been rechecked, so read its small-building rows as counts against the reviewed outlines, not as a measured miss rate.
 
 Validation in more areas, a second independent reviewer and better handling of large buildings at tile seams are possible later work. None of them is started.
 
