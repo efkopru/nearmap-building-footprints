@@ -175,6 +175,14 @@ nbf clean --input outputs/text_pilot01/raw --output outputs/text_pilot01/cleaned
 
 Cleanup repairs invalid outlines, drops slivers and removes duplicates from overlapping tiles. Where two copies overlap, it keeps one that touches neither a tile edge nor missing imagery before comparing scores, because the copy cut by a tile edge can score higher than the whole building seen by the next tile. `--duplicate-priority score` ranks by score alone. Neighbouring buildings are never merged. Every removed outline is in the `removed_audit` layer with the reason.
 
+**Confidence cut-offs.** Run `nbf infer` with a low `--confidence` to store the scores, then choose the cut-off here, where changing it costs no model run:
+
+```bash
+nbf clean --input outputs/text_pilot01/raw --output outputs/text_pilot01/cleaned_cutoffs.gpkg --metric-crs EPSG:32614 --min-score 0.7 --small-min-score 0.5
+```
+
+`--min-score` drops outlines scoring below it, before duplicates are resolved. `--small-min-score` is the cut-off for outlines under `--small-below-m2` (default 20 m²) instead. A cut-off chosen for main buildings discards most small roofs: on the Lewisville tuning area with 1024 px tiles, 0.7 kept 3 of 13 clearly visible small roofs and 0.5 kept 9. Outlines removed this way are listed with the reason `below_min_score`.
+
 **Long buildings.** A building longer than a tile is cut in every tile that sees it. To join the pieces, pass the tile manifest:
 
 ```bash

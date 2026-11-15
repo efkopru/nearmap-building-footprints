@@ -1,3 +1,4 @@
+import json
 import math
 
 import geopandas as gpd
@@ -162,6 +163,64 @@ def test_rejected_regularization_keeps_a_simplification_within_bounds():
 def test_invalid_parameters_fail(kwargs):
     with pytest.raises(ValueError):
         clean_polygons(frame([box(0, 0, 2, 2)]), crs=CRS, **kwargs)
+
+
+def test_score_cutoff_by_size_keeps_small_roofs_a_main_cutoff_discards():
+    source = frame([box(0, 0, 10, 10), box(20, 0, 30, 10), box(40, 0, 43, 3), box(50, 0, 53, 3), box(60, 0, 70, 10)],
+                   score=[0.8, 0.6, 0.55, 0.4, np.nan], instance_id=[1, 2, 3, 4, 5])
+    plain = clean_polygons(source, crs=CRS)
+    assert plain.cleaned.instance_id.tolist() == [1, 2, 3, 4, 5] and plain.removed.empty
+
+    one = clean_polygons(source, crs=CRS, min_score=0.7)
+    assert one.cleaned.instance_id.tolist() == [1]
+    assert one.removed.removed_reason.tolist() == ["below_min_score"] * 4  # a missing score is below any cut-off
+
+    two = clean_polygons(source, crs=CRS, min_score=0.7, small_min_score=0.5)
+    assert two.cleaned.instance_id.tolist() == [1, 3]  # the 9 m2 outline at 0.55 survives
+    assert two.removed.instance_id.tolist() == [2, 4, 5]
+
+    # Alone, the small cut-off leaves larger outlines untouched, whatever their score.
+    small_only = clean_polygons(source, crs=CRS, small_min_score=0.5)
+    assert small_only.cleaned.instance_id.tolist() == [1, 2, 3, 5]
+    # The size limit is a parameter: with 5 m2 the two 9 m2 outlines count as main buildings.
+    assert clean_polygons(source, crs=CRS, min_score=0.5, small_min_score=0.9, small_area=5).cleaned.instance_id.tolist() == [1, 2, 3]
+
+
+def test_score_cutoff_is_applied_before_duplicates_are_resolved():
+    """A complete low-score copy outranks a cut high-score copy; it must not win and then be dropped."""
+    source = frame([box(0, 0, 10, 10), box(0.2, 0, 10.2, 10)], score=[0.4, 0.9], instance_id=[1, 2],
+                   edge_touch=[False, True], tile_id=["a", "b"])
+    assert clean_polygons(source, crs=CRS).cleaned.instance_id.tolist() == [1]
+    result = clean_polygons(source, crs=CRS, min_score=0.7)
+    assert result.cleaned.instance_id.tolist() == [2]
+    assert result.removed.removed_reason.tolist() == ["below_min_score"]
+
+
+@pytest.mark.parametrize("kwargs", [{"min_score": 1.2}, {"small_min_score": -0.1}, {"min_score": math.nan},
+                                   {"min_score": True}, {"small_min_score": 0.5, "small_area": 0}])
+def test_invalid_score_cutoffs_fail(kwargs):
+    with pytest.raises(ValueError):
+        clean_polygons(frame([box(0, 0, 2, 2)], score=[0.5]), crs=CRS, **kwargs)
+
+
+def test_score_cutoff_needs_scores():
+    with pytest.raises(ValueError, match="needs a 'score' field"):
+        clean_polygons(frame([box(0, 0, 10, 10)]), crs=CRS, min_score=0.5)
+
+
+def test_clean_command_reports_score_cutoffs_only_when_used(tmp_path, capsys):
+    path = tmp_path / "raw.gpkg"
+    frame([box(0, 0, 10, 10), box(20, 0, 23, 3), box(30, 0, 33, 3)], score=[0.9, 0.55, 0.3]).to_file(path, driver="GPKG")
+    main(["--input", str(path), "--output", str(tmp_path / "plain.gpkg"), "--metric-crs", CRS])
+    plain = json.loads(capsys.readouterr().out)
+    assert plain["cleaned_count"] == 3 and "below_min_score" not in plain and "min_score" not in plain
+    main(["--input", str(path), "--output", str(tmp_path / "cut.gpkg"), "--metric-crs", CRS,
+          "--min-score", "0.7", "--small-min-score", "0.5"])
+    cut = json.loads(capsys.readouterr().out)
+    assert (cut["cleaned_count"], cut["below_min_score"]) == (2, 1)
+    assert (cut["min_score"], cut["small_min_score"], cut["small_below_m2"]) == (0.7, 0.5, 20.0)
+    removed = gpd.read_file(tmp_path / "cut.gpkg", layer="removed_audit")
+    assert removed.removed_reason.tolist() == ["below_min_score"]
 
 
 def test_empty_input_and_empty_audit_are_written(tmp_path):

@@ -35,7 +35,7 @@ Review held-out labels against the imagery without viewing predictions, agreemen
 
 For Lewisville, Esad confirmed completion of both reviews on October 15, 2026 (America/Chicago), following the documented rules with no unresolved cases. The reviewer attested that the test-area review used only the aerial imagery and historical outlines, with no exposure to SAM 3 or Esri predictions before or during that review. The reviewed reference inherits the historical inventory's geometry and building identities; it is not a second independently drawn annotation set. The [reviewed results](../results/lewisville/reviewed_2026/README.md) apply to one 700 m test square. Settings were selected against the historical Old Town inventory and remained frozen for this evaluation.
 
-Those test results are now published, so they can no longer serve as an unseen test for later work. The planned fine-tuning experiment therefore needs fresh test areas, and the completed test labels must stay out of training and setting selection. The [fine-tuning guide](USAGE.md#9-fine-tune-sam-3) describes the new areas and labels it needs.
+Those test results are now published, so they can no longer serve as an unseen test for later work. The planned fine-tuning experiment therefore needs fresh test areas, and the completed test labels must stay out of training and setting selection. Its [protocol](../results/lewisville/finetuning_protocol.md) fixes the new areas, the labeling rules and the comparison in advance.
 
 ## 3. Record the human input for each method
 
@@ -114,7 +114,7 @@ Last updated November 2026. Software checks and measured results are listed sepa
 **Not run yet**
 
 - Accuracy evaluation across several independent geographic areas or an independently redrawn reference. City-wide results still measure agreement with an inventory dated primarily 2015 or earlier, with 33 undated source features; the [historical reference provenance](../results/lewisville/reference_provenance.json) distinguishes the 38,924 source features from the 38,882 evaluated city-wide outlines.
-- A fine-tuning experiment with results ([issue #4](https://github.com/efkopru/nearmap-building-footprints/issues/4)). The pilot trained on development labels from Old Town, so it shows that training works, not that it helps. The experiment needs the newly labeled training, validation and fresh test areas listed in the [fine-tuning guide](USAGE.md#9-fine-tune-sam-3).
+- A fine-tuning experiment with results ([issue #4](https://github.com/efkopru/nearmap-building-footprints/issues/4)). The pilot trained on development labels from Old Town, so it shows that training works, not that it helps. The experiment follows a [protocol fixed in advance](../results/lewisville/finetuning_protocol.md); its 38 areas are chosen and not yet reviewed.
 - Seam merging, `nbf agree` and the chunked Esri commands on the Lewisville imagery; they are covered by synthetic tests.
 - Any licensed Nearmap AI layer.
 
