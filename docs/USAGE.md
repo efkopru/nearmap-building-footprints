@@ -70,6 +70,14 @@ nbf tile path/to/aoi_rgb.tif --output data/prepared/pilot01 --tile-size 1024 --o
 
 Tile size and overlap are starting points, not best values. Big roofs need bigger tiles or more overlap, and more overlap means more disk space. `--overlap` is a minimum: every tile is full size, so the last row and column sit flush with the raster's edge and overlap their neighbours by more.
 
+**Separate areas.** To tile several areas of one image into a single manifest, pass a polygon layer:
+
+```bash
+nbf tile path/to/city.vrt --output data/prepared/areas01 --areas data/labels/splits.gpkg --area-id-field area_id --tile-size 1024 --overlap 512
+```
+
+Each area is tiled on its own, starting at its top-left corner, and its tile ids begin with the area's id. `--area-margin-px` adds a border around each area, so that a building on its edge is seen whole.
+
 ## 4. Run SAM 3
 
 ### GPU environment
@@ -274,7 +282,7 @@ Two checks are strict by default, and real data usually needs their tolerances. 
 
 **Set up training.** `bash scripts/setup_sam3.sh --training` adds Meta's training packages to the GPU environment. Meta's loss compiles a small GPU helper the first time it runs, so the environment also needs a C compiler and Python's headers (`sudo apt install build-essential python3.12-dev`); the script checks for them first.
 
-**Run a pilot, then train.** [`configs/sam3_training.example.yaml`](../configs/sam3_training.example.yaml) targets Meta's SAM 3 commit `2345a4ad109ac29c569da749c91d84f10dc08c40` and follows Meta's Roboflow recipe with building masks, one image per step and 20 epochs, validating on `val` and leaving `test` untouched. First run a copy with `max_epochs: 1` to check a training step, validation and checkpoint saving on your hardware. In the Linux training environment:
+**Run a pilot, then train.** [`configs/sam3_training.example.yaml`](../configs/sam3_training.example.yaml) targets Meta's SAM 3 commit `2345a4ad109ac29c569da749c91d84f10dc08c40` and follows Meta's Roboflow recipe with building masks, one image per step and 20 epochs, validating on `val` and leaving `test` untouched. Besides the latest `checkpoint.pt` it keeps one every five epochs (`checkpoint_5.pt` and so on), so that validation can choose among them. First run a copy with `max_epochs: 1` to check a training step, validation and checkpoint saving on your hardware. In the Linux training environment:
 
 ```bash
 cp configs/sam3_training.example.yaml /path/to/sam3/sam3/train/configs/buildings.yaml
@@ -287,7 +295,10 @@ nbf train launch --checkout /path/to/sam3 --config /path/to/sam3/sam3/train/conf
 
 This prints the plan; add `--execute` to train, and `--record outputs/sam3-buildings-v1-run.json` to keep the wall time, exit code and peak GPU memory, whether the run finishes or fails. The config must sit inside Meta's checkout, because Meta's launcher looks for it there. ([Meta's training guide](https://github.com/facebookresearch/sam3/blob/2345a4ad109ac29c569da749c91d84f10dc08c40/README_TRAIN.md))
 
-On a 6 GB RTX 4050 under WSL2, a step on a 1024 px tile takes a little over a second and PyTorch's own peak is about 4.8 GB. 20 epochs over 26 tiles, with validation after each, took 29 minutes. That card is at its limit: a GPU that fills up under WSL2 does not stop but spills into shared system memory, and steps become several times slower. The launcher therefore asks PyTorch to release cached memory early (it sets `PYTORCH_CUDA_ALLOC_CONF` unless you have set it).
+On a 6 GB RTX 4050 under WSL2, a step on a 1024 px tile takes about a second and PyTorch's own peak is 3.7 GB. 20 epochs over 18 tiles, with validation after each, took 11 minutes. Two things keep it inside 6 GB:
+
+- **Masks are compared at sampled points.** Meta's recipe enlarges every predicted mask to the full image, which on a tile with many buildings needs over a gigabyte more and stopped a run here with an out-of-memory error. The template compares each mask at 12,544 sampled points instead, as Mask2Former does. Validation scores stayed within about 0.02 of the full-size comparison. To compare whole masks on a larger GPU, remove the three sampling lines from the template.
+- **Cached memory is released early.** A GPU that fills up under WSL2 may not stop: it can spill into shared system memory, and steps then run several times slower. The launcher sets `PYTORCH_CUDA_ALLOC_CONF` for this unless you have set it.
 
 **Export the weights.** A training checkpoint cannot go straight to inference: its weights are stored under other names, which the inference loader would silently skip, and it does not hold the frozen backbones. Export it together with the released checkpoint the training started from:
 
@@ -295,7 +306,9 @@ On a 6 GB RTX 4050 under WSL2, a step on a 1024 px tile takes a little over a se
 nbf train export-checkpoint --input /path/to/outputs/sam3-buildings-v1/checkpoints/checkpoint.pt --base-checkpoint /path/to/models/sam3.pt --output /path/to/models/buildings-inference.pt
 ```
 
-The export loads both files with `torch.load(weights_only=True)`, takes the frozen backbones from the released file unchanged, checks every tensor and writes inference-ready weights plus `buildings-inference.pt.metadata.json` with the hashes of all three files. Keep the training checkpoint to resume training. The fine-tuned model supports the **text** and **exemplar** modes only; use the original checkpoint for box and point. Select the checkpoint, prompt, confidence threshold and cleanup settings on validation data only, then freeze them. Keep the original pretrained SAM 3 as the control and score both models on the same fresh test imagery and frozen labels. Report all-size and ≥20 m² results separately, plus under-20 m² diagnostics, with the same matching and edge rules for each model. This command prints a four-tile inference plan; it is not a complete test-area evaluation:
+The export loads both files with `torch.load(weights_only=True)`, takes the frozen backbones from the released file unchanged, checks every tensor and writes inference-ready weights plus `buildings-inference.pt.metadata.json` with the hashes of all three files. Keep the training checkpoint to resume training. The fine-tuned model supports the **text** and **exemplar** modes only; use the original checkpoint for box and point. Select the checkpoint, prompt, confidence threshold and cleanup settings on validation data only, then freeze them. Keep the original pretrained SAM 3 as the control and score both models on the same fresh test imagery and frozen labels. Report all-size and ≥20 m² results separately, plus under-20 m² diagnostics, with the same matching and edge rules for each model. For Lewisville these rules are fixed in a [protocol](../results/lewisville/finetuning_protocol.md), and [`scripts/finetune_protocol.py`](../scripts/finetune_protocol.py) does its bookkeeping: it freezes the reviewed labels, chooses settings on the validation squares and scores the test squares once, with ranges.
+
+This command prints a four-tile inference plan; it is not a complete test-area evaluation:
 
 ```bash
 nbf infer --manifest data/test-tiles/manifest.json --method text --text building --checkpoint /path/to/models/buildings-inference.pt --bpe-path /path/to/sam3/sam3/assets/bpe_simple_vocab_16e6.txt.gz --output outputs/sam3_finetuned_text --limit 4
