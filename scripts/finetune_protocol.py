@@ -34,6 +34,8 @@ SMALL_CUTOFFS = (0.3, 0.4, 0.5, 0.6, 0.7)
 SMALL_M2 = 20.0
 RESAMPLES, SEED = 1000, 20261114
 COUNTS = ("tp", "fp", "fn", "tp20", "fp20", "fn20", "small_labels", "small_found", "small_drawn", "small_matched")
+# What a reviewer may write in a square's `reviewed` field once it is finished; empty means not yet.
+DONE = {"yes", "y", "done", "x", "true", "1"}
 
 
 def sha256(path):
@@ -42,7 +44,12 @@ def sha256(path):
 
 def reviewed_squares(areas, minimum=MINIMUM):
     """The squares marked reviewed, which must be the first k of each list with no gap."""
-    done = areas[areas["reviewed"].fillna("").astype(str).str.strip() != ""]
+    marks = areas["reviewed"].fillna("").astype(str).str.strip().str.lower()
+    unclear = areas.loc[(marks != "") & ~marks.isin(DONE), ["area_id", "reviewed"]]
+    if len(unclear):
+        listed = ", ".join(f"{row.area_id} ({row.reviewed!r})" for row in unclear.itertuples())
+        raise ValueError(f"Write yes in `reviewed` when a square is finished and leave it empty until then; unclear: {listed}")
+    done = areas[marks.isin(DONE)]
     for name in LISTS:
         orders = sorted(int(value) for value in done.loc[done["split"] == name, "order_in_split"])
         if orders != list(range(1, len(orders) + 1)):
@@ -87,15 +94,23 @@ def freeze(package, output, minimum=MINIMUM):
 
 
 def read_raw(folder):
-    """Every raw outline of one inference run."""
-    import geopandas as gpd
-    import pandas as pd
+    """Every finished raw outline of one inference run, read as nbf clean reads a raw folder.
 
-    files = sorted(Path(folder).glob("*.gpkg"))
-    if not files:
-        raise FileNotFoundError(f"No raw outlines in {folder}")
-    frames = [gpd.read_file(path) for path in files]
-    return gpd.GeoDataFrame(pd.concat(frames, ignore_index=True), crs=frames[0].crs)
+    That skips the *.part.gpkg files an interrupted run leaves and refuses a file with no CRS.
+    """
+    from nearmap_buildings.postprocess import read_polygon_inputs
+
+    if not Path(folder).is_dir():
+        raise FileNotFoundError(f"No raw outline folder: {folder}")
+    return read_polygon_inputs(folder)[0]
+
+
+def published_run(runs):
+    """The published setting's run, which must use the published 1536 px tiles."""
+    run = runs["published"]
+    if run.get("tiles", 1536) != 1536:
+        raise ValueError(f"The published setting uses 1536 px tiles; the runs file names {run['tiles']} px")
+    return run
 
 
 def score_squares(raw, labels, squares, *, min_score, small_min_score, reference_status="independent_holdout"):
@@ -200,7 +215,9 @@ def choose(frozen, runs, output, reference_status="independent_holdout"):
         raise FileExistsError(f"The choice is written once, before any test score: {output}")
     labels, squares = load_frozen(frozen, "val")
     status = dict(reference_status=reference_status)
-    published = pooled(score_squares(read_raw(runs["published"]["raw"]), labels, squares, **PUBLISHED, **status))
+    published = pooled(score_squares(read_raw(published_run(runs)["raw"]), labels, squares, **PUBLISHED, **status))
+    if published["f1_20"] is None:
+        raise ValueError("The validation squares hold no building of 20 m2 or more, so the choice rule has nothing to keep")
     record = {"schema": "finetune-choice-v1", "frozen": sha256(Path(frozen) / "freeze.json"),
               "validation_squares": squares["area_id"].tolist(), "published": {**PUBLISHED, "tiles": 1536, **published}}
     table = []
@@ -234,11 +251,12 @@ def score(frozen, choice_path, runs, output, reference_status="independent_holdo
               "test_squares": squares["area_id"].tolist(), "resamples": RESAMPLES, "seed": SEED, "runs": {}}
     for arm in ("published", "released", "fine_tuned"):
         setting = PUBLISHED if arm == "published" else {key: choice[arm][key] for key in ("min_score", "small_min_score")}
-        run = runs[arm]
+        run = published_run(runs) if arm == "published" else runs[arm]
         if arm != "published" and any(run.get(key) != choice[arm].get(key) for key in ("tiles", "epoch")):
             raise ValueError(f"The {arm} test run does not use the chosen tile size and checkpoint")
         rows = score_squares(read_raw(run["raw"]), labels, squares, **setting, reference_status=reference_status)
-        record["runs"][arm] = {"setting": {**setting, **{k: v for k, v in run.items() if k != "raw"}},
+        tiles = {"tiles": 1536} if arm == "published" else {}
+        record["runs"][arm] = {"setting": {**setting, **tiles, **{k: v for k, v in run.items() if k != "raw"}},
                                "summary": summarize(rows), "squares": rows}
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(record, indent=2), encoding="utf-8")
@@ -261,7 +279,7 @@ def main(argv=None):
             step.add_argument("--choice", required=True, type=Path)
     for step in commands.choices.values():
         step.add_argument("--rehearsal", action="store_true",
-                          help="development data: no minimum number of squares, and scores are recorded as agreement only")
+                          help="development data: one reviewed square per list is enough, and scores are recorded as agreement only")
     args = parser.parse_args(argv)
     status = "agreement_only" if args.rehearsal else "independent_holdout"
     try:

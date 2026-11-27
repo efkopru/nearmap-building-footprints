@@ -32,6 +32,10 @@ def test_reviewed_squares_must_be_the_first_of_each_list():
         protocol.reviewed_squares(areas_frame(skipped), one_each)
     with pytest.raises(ValueError, match="at least 8 reviewed test squares"):
         protocol.reviewed_squares(areas_frame(everything))
+    # Only a clear yes counts; anything else is refused rather than guessed.
+    assert len(protocol.reviewed_squares(areas_frame({**everything, "test-02": " Done "}), one_each)) == 4
+    with pytest.raises(ValueError, match=r"unclear: test-02 \('partly'\)"):
+        protocol.reviewed_squares(areas_frame({**everything, "test-02": "partly"}), one_each)
 
 
 def row(area_id, kind="S", **counts):
@@ -134,6 +138,8 @@ def package(tmp_path):
                          "tuned_test": [(box(10, 10, 30, 30), 0.9), (box(50, 50, 53, 53), 0.8), (box(150, 10, 170, 30), 0.9)]}.items():
         (runs / name).mkdir(parents=True)
         raw_frame(shapes).to_file(runs / name / "tile.gpkg", driver="GPKG")
+    # An interrupted write that inference left behind; it must not be scored.
+    raw_frame([(box(30, 30, 40, 40), 0.9)]).to_file(runs / "published_test" / "tile2.part.gpkg", driver="GPKG")
     return folder, runs
 
 
@@ -152,6 +158,11 @@ def test_freeze_choose_and_score_run_once_each(package, tmp_path, capsys):
                                     "released": [{"tiles": 1024, "raw": str(runs / "released_1024_val")}],
                                     "fine_tuned": [{"tiles": 1024, "epoch": 5, "raw": str(runs / "tuned_5_val")}]}))
     choice_path = tmp_path / "choice.json"
+    one_size = tmp_path / "one_size_runs.json"
+    one_size.write_text(json.dumps({**json.loads(val_runs.read_text()), "published": {"tiles": 1024, "raw": str(runs / "published_val")}}))
+    with pytest.raises(SystemExit):  # the published setting is 1536 px
+        protocol.main(["choose", "--frozen", str(frozen), "--runs", str(one_size), "--output", str(choice_path), "--rehearsal"])
+    assert not choice_path.exists()
     protocol.main(["choose", "--frozen", str(frozen), "--runs", str(val_runs), "--output", str(choice_path), "--rehearsal"])
     choice = json.loads(choice_path.read_text())
     assert choice["published"]["f1"] == pytest.approx(2 / 3) and choice["published"]["small_recall"] == 0
@@ -180,7 +191,9 @@ def test_freeze_choose_and_score_run_once_each(package, tmp_path, capsys):
     scores = json.loads(scores_path.read_text())
     summary = {arm: scores["runs"][arm]["summary"] for arm in ("published", "released", "fine_tuned")}
     # Three labels in the two test squares: a house and a shed in the first, a house in the second.
-    assert (summary["published"]["all"]["tp"], summary["published"]["all"]["fn"]) == (1, 2)
+    # The leftover .part file would have added a false outline next to the house.
+    assert (summary["published"]["all"]["tp"], summary["published"]["all"]["fp"], summary["published"]["all"]["fn"]) == (1, 0, 2)
+    assert scores["runs"]["published"]["setting"]["tiles"] == 1536
     assert (summary["released"]["all"]["tp"], summary["released"]["all"]["small_found"]) == (2, 1)
     assert summary["fine_tuned"]["all"]["f1"] == 1.0 and summary["fine_tuned"]["G"]["tp"] == 1
     assert scores["runs"]["fine_tuned"]["setting"] == {"min_score": 0.8, "small_min_score": 0.7, "tiles": 1024, "epoch": 5}
