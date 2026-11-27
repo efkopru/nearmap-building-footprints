@@ -144,3 +144,7 @@ def test_tile_command_takes_an_areas_layer(raster, tmp_path, capsys):
     manifest = json.loads((tmp_path / "tiles/manifest.json").read_text())
     assert manifest["areas"] == {"ids": ["s1"], "margin_px": 4}
     assert {item["area_id"] for item in manifest["tiles"]} == {"s1"}
+    # Area options without --areas would quietly tile the whole image instead.
+    with pytest.raises(SystemExit):
+        tile_main([str(raster), "--output", str(tmp_path / "plain"), "--area-margin-px", "4"])
+    assert not (tmp_path / "plain").exists()

@@ -151,6 +151,8 @@ def tile_main(argv=None):
     p.add_argument("--area-id-field", default="area_id")
     p.add_argument("--area-margin-px", type=int, default=0, help="Extra pixels around each area, so buildings on its edge are seen whole.")
     a = p.parse_args(argv)
+    if a.areas is None and (a.areas_layer is not None or a.area_id_field != "area_id" or a.area_margin_px):
+        p.error("--areas-layer, --area-id-field and --area-margin-px need --areas")
     areas = None
     if a.areas is not None:
         with rasterio.open(a.source) as src:
